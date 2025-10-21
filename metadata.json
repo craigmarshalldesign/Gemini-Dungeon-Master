@@ -1,0 +1,5 @@
+{
+  "name": "Gemini Dungeon Master",
+  "description": "A D&D inspired two-player RPG where an AI Dungeon Master, powered by Gemini, crafts the world, story, and characters for a unique adventure every time you play.",
+  "requestFramePermissions": []
+}
