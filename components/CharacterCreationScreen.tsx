@@ -37,7 +37,7 @@ const CharacterCreationScreen: React.FC<CharacterCreationScreenProps> = ({ onCre
   );
 
   return (
-    <form onSubmit={handleSubmit} className="p-4 bg-black border-2 border-gray-600">
+    <form onSubmit={handleSubmit} className="p-4 bg-black border-2 border-gray-600 h-full rounded-lg">
       <h2 className="text-xl text-center mb-6">Create Your Adventurers</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         {/* Player 1 */}

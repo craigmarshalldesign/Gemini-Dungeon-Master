@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import LoadingProgressBar from './LoadingProgressBar';
 
@@ -24,7 +23,7 @@ const GameCreationScreen: React.FC<GameCreationScreenProps> = ({ onCreate, isLoa
   };
 
   return (
-    <div className="flex flex-col items-center justify-center text-center p-4 bg-black border-2 border-gray-600">
+    <div className="flex flex-col items-center justify-center text-center p-4 bg-black border-2 border-gray-600 h-full rounded-lg">
       <h2 className="text-xl mb-4">Create Your World</h2>
       <p className="mb-4 text-gray-400">Describe the main storyline for your adventure, or let the AI choose for you.</p>
       
@@ -38,7 +37,6 @@ const GameCreationScreen: React.FC<GameCreationScreenProps> = ({ onCreate, isLoa
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
           />
-          {error && <p className="text-red-500 mb-4">{error}</p>}
           <div className="flex flex-col sm:flex-row gap-4">
             <button
               onClick={handleCreate}

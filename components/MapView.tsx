@@ -80,7 +80,7 @@ const MapView: React.FC<MapViewProps> = ({ zone, players, activePlayerId, onSele
 
   return (
     <div 
-        className="grid bg-black border-4 border-gray-600 w-full"
+        className="grid bg-black border-4 border-gray-600 w-full rounded-lg overflow-hidden"
         style={{ 
             gridTemplateColumns: `repeat(${mapSize}, minmax(0, 1fr))`,
             aspectRatio: '1 / 1',

@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback } from 'react';
 import type { GameState, Player, Zone, Item, Quest, ZoneMap } from './types';
 import { GameStatus, ClassType, QuestStatus } from './types';
@@ -9,6 +8,7 @@ import GameCreationScreen from './components/GameCreationScreen';
 import CharacterCreationScreen from './components/CharacterCreationScreen';
 import GameScreen from './components/GameScreen';
 import DialogueMenu from './components/DialogueMenu';
+import ErrorModal from './components/ErrorModal';
 
 const App: React.FC = () => {
   const [gameState, setGameState] = useState<GameState>({
@@ -31,6 +31,10 @@ const App: React.FC = () => {
     messageQueue: null,
     hasNewQuest: false,
   });
+
+  const handleClearError = () => {
+    setGameState(prev => ({ ...prev, error: null }));
+  };
 
   const handleWorldCreate = useCallback(async (prompt: string) => {
     setGameState(prev => ({ 
@@ -178,7 +182,7 @@ const App: React.FC = () => {
   const dmBoxHeight = isCharacterCreation
     ? ''
     : gameState.status === GameStatus.PLAYING 
-    ? 'h-24' 
+    ? 'h-32' 
     : 'h-20';
   
   const dmBoxOverflow = isCharacterCreation ? '' : 'overflow-y-auto';
@@ -186,8 +190,8 @@ const App: React.FC = () => {
   const contentOverflow = gameState.status === GameStatus.PLAYING ? 'overflow-hidden' : 'overflow-y-auto';
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center font-sans">
-      <div className="w-full max-w-sm h-full max-h-[900px] border-4 border-gray-600 bg-gray-800 shadow-lg flex flex-col" style={{fontFamily: "'Press Start 2P', cursive"}}>
+    <div className="min-h-screen bg-gray-900 text-white flex flex-col md:items-center md:justify-center font-sans">
+      <div className="w-full h-screen md:h-auto md:max-w-sm md:max-h-[900px] border-4 border-gray-600 bg-gray-800 shadow-lg flex flex-col" style={{fontFamily: "'Press Start 2P', cursive"}}>
           <div className="flex-shrink-0 p-2">
             <div className="flex gap-2 items-start">
               <div className={`flex-grow bg-black text-green-300 p-2 border-2 border-green-500 ${dmBoxHeight} text-xs whitespace-pre-wrap ${dmBoxOverflow}`}>
@@ -202,6 +206,7 @@ const App: React.FC = () => {
             {renderContent()}
           </div>
       </div>
+      {gameState.error && <ErrorModal error={gameState.error} onClose={handleClearError} />}
     </div>
   );
 };

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import type { GameState, Player, Direction, NPC, Item, Quest, DialogueState } from '../types';
 import { QuestStatus, ClassType } from '../types';
@@ -468,7 +469,7 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState }) => {
         />
       )}
       
-      <div className="flex-shrink-0 flex justify-around items-center">
+      <div className="flex-shrink-0 flex justify-around items-center mb-2">
           <button disabled={areControlsDimmed} onClick={() => setShowCharSheet(players[0])} className={`px-2 py-1 text-[10px] bg-green-700 rounded ${activePlayerId === 0 ? 'ring-2 ring-white' : ''} disabled:opacity-50`}>{players[0].name} Lvl {players[0].stats.level}</button>
           <button onClick={switchPlayer} disabled={isSwitchPlayerDisabled} className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-500 border-b-2 border-blue-800 active:border-b-0 disabled:opacity-50 text-base">
               🔄
