@@ -51,7 +51,7 @@ const ChatModal: React.FC<ChatModalProps> = ({ npc, chatHistory, messagesSent, i
           <button onClick={onClose} className="text-2xl font-bold">&times;</button>
         </div>
         
-        <div ref={chatHistoryRef} className="flex-grow p-4 space-y-4 overflow-y-auto bg-[#f5e8c3]">
+        <div ref={chatHistoryRef} className="flex-grow min-h-0 p-4 space-y-4 overflow-y-auto bg-[#f5e8c3]">
             {chatHistory.map((msg, index) => (
                 <div key={index} className={`flex flex-col ${msg.author === 'player' ? 'items-end' : 'items-start'}`}>
                     <div className={`max-w-[80%] p-3 rounded-lg border-2 border-[#a39360] ${msg.author === 'player' ? 'bg-[#d4e4d4]' : 'bg-[#e0e0e0]'}`}>
