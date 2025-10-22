@@ -1,14 +1,16 @@
 
 import React, { useState } from 'react';
-import LoadingSpinner from './LoadingSpinner';
+import LoadingProgressBar from './LoadingProgressBar';
 
 interface GameCreationScreenProps {
   onCreate: (prompt: string) => void;
   isLoading: boolean;
   error: string | null;
+  loadingProgress: number;
+  loadingMessage: string;
 }
 
-const GameCreationScreen: React.FC<GameCreationScreenProps> = ({ onCreate, isLoading, error }) => {
+const GameCreationScreen: React.FC<GameCreationScreenProps> = ({ onCreate, isLoading, error, loadingProgress, loadingMessage }) => {
   const [prompt, setPrompt] = useState('');
 
   const handleCreate = () => {
@@ -27,7 +29,7 @@ const GameCreationScreen: React.FC<GameCreationScreenProps> = ({ onCreate, isLoa
       <p className="mb-4 text-gray-400">Describe the main storyline for your adventure, or let the AI choose for you.</p>
       
       {isLoading ? (
-        <LoadingSpinner />
+        <LoadingProgressBar progress={loadingProgress} message={loadingMessage} />
       ) : (
         <>
           <textarea

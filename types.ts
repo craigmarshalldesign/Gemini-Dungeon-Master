@@ -1,4 +1,5 @@
 
+
 export enum GameStatus {
   WORLD_CREATION,
   CHARACTER_CREATION,
@@ -98,6 +99,7 @@ export interface Quest {
   id: string;
   title: string;
   description: string;
+  completionDialogue: string;
   status: QuestStatus;
   objective: QuestObjective;
   xpReward: number;
@@ -115,11 +117,13 @@ export interface NPC {
   };
   position: { x: number; y: number };
   quest: Quest | null;
+  initialDialogue: string;
 }
 
 export type ZoneMap = string[][];
 
 export interface Zone {
+  name: string;
   description: string;
   tileMap: ZoneMap;
   npcs: NPC[];
@@ -129,8 +133,18 @@ export interface Zone {
 
 export interface DialogueState {
   npc: NPC;
+  currentText: string;
+  menuSelectionIndex: number; // 0 for Talk, 1 for Chat, 2 for Close
+}
+
+export interface DisplayChatMessage {
+  author: 'player' | 'npc';
   text: string;
-  choices: string[];
+}
+
+export interface NPCChatState {
+  history: DisplayChatMessage[];
+  messagesSent: number;
 }
 
 export interface GameState {
@@ -142,8 +156,14 @@ export interface GameState {
   worldMap: WorldMap | null;
   currentZone: Zone | null;
   dialogue: DialogueState | null;
+  isChatting: boolean;
+  chatStates: Record<string, NPCChatState>; // Key is NPC name
   activePlayerId: number;
   isLoading: boolean;
+  loadingProgress: number;
+  loadingMessage: string;
   error: string | null;
   quests: Quest[];
+  messageQueue: string[] | null;
+  hasNewQuest: boolean;
 }
