@@ -10,6 +10,20 @@ interface ZoneResponse {
     exitPosition: { x: number, y: number };
 }
 
+/**
+ * Extracts the first valid JSON object from a string that might be wrapped in markdown or have extra text.
+ * @param text The string to extract JSON from.
+ * @returns The clean JSON string.
+ * @throws An error if no JSON object is found.
+ */
+function extractJson(text: string): string {
+    const match = text.match(/\{[\s\S]*\}/);
+    if (match) {
+        return match[0];
+    }
+    throw new Error("No valid JSON object found in the AI response.");
+}
+
 export async function generateZone(zoneDescription: string, worldName: string, mainStoryline: string): Promise<ZoneResponse> {
     const prompt = `You are a Dungeon Master for a world named '${worldName}'. The main story is: '${mainStoryline}'.
     Generate a detailed 20x20 tile-based map for a zone described as: '${zoneDescription}'. 
@@ -104,7 +118,7 @@ export async function generateZone(zoneDescription: string, worldName: string, m
     });
     
     try {
-        const jsonText = response.text.replace(/```json|```/g, '').trim();
+        const jsonText = extractJson(response.text);
         const responseData = JSON.parse(jsonText);
         
         const tileMap = responseData.tileMap as ZoneMap;

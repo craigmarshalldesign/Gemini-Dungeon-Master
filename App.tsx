@@ -1,4 +1,5 @@
-import React, { useState, useCallback } from 'react';
+
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import type { GameState, Player, Zone, Item, Quest, ZoneMap } from './types';
 import { GameStatus, ClassType, QuestStatus } from './types';
 import { generateWorld } from './services/worldService';
@@ -10,27 +11,70 @@ import GameScreen from './components/GameScreen';
 import DialogueMenu from './components/DialogueMenu';
 import ErrorModal from './components/ErrorModal';
 
+const initialGameState: GameState = {
+  status: GameStatus.WORLD_CREATION,
+  worldName: '',
+  mainStoryline: '',
+  dmMessage: 'Welcome, adventurer. A new world awaits your story.',
+  players: [null, null],
+  worldMap: null,
+  currentZone: null,
+  dialogue: null,
+  isChatting: false,
+  chatStates: {},
+  activePlayerId: 0,
+  isLoading: false,
+  loadingProgress: 0,
+  loadingMessage: '',
+  error: null,
+  quests: [],
+  messageQueue: null,
+  hasNewQuest: false,
+};
+
 const App: React.FC = () => {
-  const [gameState, setGameState] = useState<GameState>({
-    status: GameStatus.WORLD_CREATION,
-    worldName: '',
-    mainStoryline: '',
-    dmMessage: 'Welcome, adventurer. A new world awaits your story.',
-    players: [null, null],
-    worldMap: null,
-    currentZone: null,
-    dialogue: null,
-    isChatting: false,
-    chatStates: {},
-    activePlayerId: 0,
-    isLoading: false,
-    loadingProgress: 0,
-    loadingMessage: '',
-    error: null,
-    quests: [],
-    messageQueue: null,
-    hasNewQuest: false,
-  });
+  const [gameState, setGameState] = useState<GameState>(initialGameState);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const appRef = useRef<HTMLDivElement>(null);
+
+  const handleFullscreenChange = useCallback(() => {
+    setIsFullscreen(!!document.fullscreenElement);
+  }, []);
+
+  useEffect(() => {
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, [handleFullscreenChange]);
+
+  const toggleFullscreen = useCallback(async () => {
+    if (!appRef.current) return;
+    try {
+      if (!document.fullscreenElement) {
+        await appRef.current.requestFullscreen();
+        // FIX: The 'lock' property is not in the default ScreenOrientation type.
+        // Cast to any to bypass the TypeScript error for this experimental feature.
+        if ((window.screen?.orientation as any)?.lock) {
+          await (window.screen.orientation as any).lock('portrait').catch((err: any) => console.warn("Screen orientation lock failed:", err));
+        }
+      } else {
+        await document.exitFullscreen();
+      }
+    } catch (err) {
+      const error = err as Error;
+      console.error(`Fullscreen API error: ${error.message} (${error.name})`);
+      setGameState(prev => ({...prev, error: 'Fullscreen mode is not supported by your browser or was denied.'}));
+    }
+  }, []);
+
+  const handleEndGame = useCallback(() => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(err => {
+        const error = err as Error;
+        console.error(`Error exiting fullscreen: ${error.message} (${error.name})`);
+      });
+    }
+    setGameState(initialGameState);
+  }, []);
 
   const handleClearError = () => {
     setGameState(prev => ({ ...prev, error: null }));
@@ -144,6 +188,11 @@ const App: React.FC = () => {
     });
   }, []);
 
+  const handleStartGame = useCallback((p1Name: string, p1Class: ClassType, p2Name: string, p2Class: ClassType) => {
+    handleCharactersCreate(p1Name, p1Class, p2Name, p2Class);
+    toggleFullscreen();
+  }, [handleCharactersCreate, toggleFullscreen]);
+
   const renderContent = () => {
     switch (gameState.status) {
       case GameStatus.WORLD_CREATION:
@@ -155,9 +204,15 @@ const App: React.FC = () => {
             loadingMessage={gameState.loadingMessage}
         />;
       case GameStatus.CHARACTER_CREATION:
-        return <CharacterCreationScreen onCreate={handleCharactersCreate} isLoading={gameState.isLoading} />;
+        return <CharacterCreationScreen onCreate={handleStartGame} isLoading={gameState.isLoading} />;
       case GameStatus.PLAYING:
-        return <GameScreen gameState={gameState} setGameState={setGameState} />;
+        return <GameScreen 
+            gameState={gameState} 
+            setGameState={setGameState} 
+            isFullscreen={isFullscreen}
+            toggleFullscreen={toggleFullscreen}
+            endGame={handleEndGame}
+        />;
       default:
         return <div>Unknown game state!</div>;
     }
@@ -191,7 +246,7 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-col md:items-center md:justify-center font-sans">
-      <div className="w-full h-screen md:h-auto md:max-w-sm md:max-h-[900px] border-4 border-gray-600 bg-gray-800 shadow-lg flex flex-col" style={{fontFamily: "'Press Start 2P', cursive"}}>
+      <div ref={appRef} className="w-full h-[100dvh] md:h-auto md:max-w-sm md:max-h-[900px] border-4 border-gray-600 bg-gray-800 shadow-lg flex flex-col" style={{fontFamily: "'Press Start 2P', cursive"}}>
           <div className="flex-shrink-0 p-2">
             <div className="flex gap-2 items-start">
               <div className={`flex-grow bg-black text-green-300 p-2 border-2 border-green-500 ${dmBoxHeight} text-xs whitespace-pre-wrap ${dmBoxOverflow}`}>

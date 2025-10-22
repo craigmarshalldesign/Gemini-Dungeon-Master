@@ -11,6 +11,7 @@ import QuestsModal from './QuestsModal';
 import NpcInfoModal from './NpcInfoModal';
 import ItemInfoModal from './ItemInfoModal';
 import ChatModal from './ChatModal';
+import SettingsModal from './SettingsModal';
 import { CHARACTER_CLASSES } from '../constants';
 import { generateDialogue, startChatSession } from '../services/dialogueService';
 import type { Chat } from '@google/genai';
@@ -19,14 +20,18 @@ import type { Chat } from '@google/genai';
 interface GameScreenProps {
   gameState: GameState;
   setGameState: React.Dispatch<React.SetStateAction<GameState>>;
+  isFullscreen: boolean;
+  toggleFullscreen: () => void;
+  endGame: () => void;
 }
 
-const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState }) => {
+const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState, isFullscreen, toggleFullscreen, endGame }) => {
   const [showCharSheet, setShowCharSheet] = useState<Player | null>(null);
   const [selectedObject, setSelectedObject] = useState<NPC | Item | null>(null);
   const [showInventory, setShowInventory] = useState(false);
   const [showAbilities, setShowAbilities] = useState(false);
   const [showQuests, setShowQuests] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [zoneCompleted, setZoneCompleted] = useState(false);
   
   const [activeChatSession, setActiveChatSession] = useState<Chat | null>(null);
@@ -457,6 +462,14 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState }) => {
       {showInventory && activePlayer && <InventoryModal player={activePlayer} onClose={() => setShowInventory(false)} />}
       {showAbilities && activePlayer && <AbilitiesModal player={activePlayer} onClose={() => setShowAbilities(false)} />}
       {showQuests && <QuestsModal mainStory={mainStoryline} quests={quests} worldName={worldName} onClose={() => setShowQuests(false)} />}
+      {showSettings && (
+        <SettingsModal 
+            onClose={() => setShowSettings(false)}
+            isFullscreen={isFullscreen}
+            onToggleFullscreen={toggleFullscreen}
+            onEndGame={endGame}
+        />
+      )}
       {isChatting && dialogue && (
         <ChatModal 
             npc={dialogue.npc}
@@ -495,6 +508,7 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState }) => {
           onInventoryClick={() => setShowInventory(true)}
           onAbilitiesClick={() => setShowAbilities(true)}
           onQuestsClick={handleQuestsClick}
+          onSettingsClick={() => setShowSettings(true)}
           isDPadDisabled={isDPadDisabled}
           arePanelButtonsDisabled={arePanelButtonsDisabled}
           isBackButtonDisabled={isBackButtonDisabled}

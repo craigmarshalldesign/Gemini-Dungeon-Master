@@ -7,6 +7,7 @@ interface ControlsProps {
   onInventoryClick: () => void;
   onAbilitiesClick: () => void;
   onQuestsClick: () => void;
+  onSettingsClick: () => void;
   isDPadDisabled?: boolean;
   arePanelButtonsDisabled?: boolean;
   isBackButtonDisabled?: boolean;
@@ -66,7 +67,8 @@ const Controls: React.FC<ControlsProps> = ({
     onBack, 
     onInventoryClick, 
     onAbilitiesClick, 
-    onQuestsClick, 
+    onQuestsClick,
+    onSettingsClick,
     isDPadDisabled,
     arePanelButtonsDisabled,
     isBackButtonDisabled,
@@ -74,7 +76,7 @@ const Controls: React.FC<ControlsProps> = ({
     hasNewQuest,
 }) => {
   return (
-    <div className={`flex justify-between items-end py-1 ${areControlsDimmed ? 'opacity-50' : ''}`}>
+    <div className={`flex justify-around items-end py-2 ${areControlsDimmed ? 'opacity-50' : ''}`}>
       {/* D-Pad */}
       <div className="grid grid-cols-3 grid-rows-3 w-30 h-30">
         <DPadButton onClick={() => onMove(0, -1)} disabled={isDPadDisabled} className="col-start-2 rounded-t-lg">▲</DPadButton>
@@ -100,7 +102,10 @@ const Controls: React.FC<ControlsProps> = ({
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+              <IconButton onClick={onSettingsClick} disabled={areControlsDimmed}>
+                <span className="text-2xl">⚙️</span>
+              </IconButton>
               <ActionButton onClick={onBack} label="B" className="bg-red-700 text-white border-red-900" disabled={isBackButtonDisabled} />
               <ActionButton onClick={onInteract} label="A" className="bg-green-600 text-white border-green-800" />
           </div>
