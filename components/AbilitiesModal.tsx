@@ -1,4 +1,3 @@
-
 import React from 'react';
 import type { Player } from '../types';
 
@@ -15,7 +14,7 @@ const AbilitiesModal: React.FC<AbilitiesModalProps> = ({ player, onClose }) => {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-center border-b-2 border-gray-600 pb-2 mb-4">
-          <h2 className="text-2xl">{player.name}'s Abilities</h2>
+          <h2 className="text-lg">{player.name}'s Abilities</h2>
           <button onClick={onClose} className="text-2xl font-bold">&times;</button>
         </div>
         
@@ -24,9 +23,9 @@ const AbilitiesModal: React.FC<AbilitiesModalProps> = ({ player, onClose }) => {
                 <ul className="space-y-4">
                     {player.abilities.map(ability => (
                         <li key={ability.name} className="bg-gray-900 p-3 rounded">
-                            <strong className="text-green-400 text-lg">{ability.name} (Lvl {ability.level})</strong>
-                            <p className="text-sm text-gray-400 mt-1 mb-2">{ability.description}</p>
-                            <div className="text-sm flex flex-wrap gap-x-4 gap-y-1">
+                            <strong className="text-green-400 text-sm">{ability.name} (Lvl {ability.level})</strong>
+                            <p className="text-[10px] text-gray-400 mt-1 mb-2">{ability.description}</p>
+                            <div className="text-[10px] flex flex-wrap gap-x-4 gap-y-1">
                                 {ability.damage > 0 && (
                                     <span>Damage: <span className="font-bold text-white">{ability.damage}</span></span>
                                 )}
@@ -41,7 +40,7 @@ const AbilitiesModal: React.FC<AbilitiesModalProps> = ({ player, onClose }) => {
                     ))}
                 </ul>
            ) : (
-            <p className="text-gray-500">You have no special abilities.</p>
+            <p className="text-gray-500 text-sm">You have no special abilities.</p>
            )}
         </div>
       </div>

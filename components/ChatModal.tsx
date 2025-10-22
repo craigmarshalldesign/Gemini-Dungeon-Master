@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import type { NPC } from '../types';
 
@@ -43,7 +44,7 @@ const ChatModal: React.FC<ChatModalProps> = ({ npc, chatHistory, messagesSent, i
         style={{ imageRendering: 'pixelated' }}
       >
         <div className="flex justify-between items-center border-b-4 border-[#654321] p-4 bg-[#855e42] text-yellow-100">
-          <h2 className="text-xl">Chat with {npc.name}</h2>
+          <h2 className="text-lg">Chat with {npc.name}</h2>
           <button onClick={onClose} className="text-2xl font-bold">&times;</button>
         </div>
         
@@ -51,16 +52,16 @@ const ChatModal: React.FC<ChatModalProps> = ({ npc, chatHistory, messagesSent, i
             {chatHistory.map((msg, index) => (
                 <div key={index} className={`flex flex-col ${msg.author === 'player' ? 'items-end' : 'items-start'}`}>
                     <div className={`max-w-[80%] p-3 rounded-lg border-2 border-[#a39360] ${msg.author === 'player' ? 'bg-[#d4e4d4]' : 'bg-[#e0e0e0]'}`}>
-                        {msg.author === 'npc' && <strong className="block text-[#4a2e1a] text-sm mb-1">{npc.name}</strong>}
-                        <p className="whitespace-pre-wrap text-sm">{msg.text}</p>
+                        {msg.author === 'npc' && <strong className="block text-[#4a2e1a] text-xs mb-1">{npc.name}</strong>}
+                        <p className="whitespace-pre-wrap text-xs">{msg.text}</p>
                     </div>
                 </div>
             ))}
             {isLoading && chatHistory.length > 0 && chatHistory[chatHistory.length-1].author === 'player' && (
                 <div className="flex flex-col items-start">
                     <div className="max-w-[80%] p-3 rounded-lg border-2 border-[#a39360] bg-[#e0e0e0]">
-                         <strong className="block text-[#4a2e1a] text-sm mb-1">{npc.name}</strong>
-                         <p className="animate-pulse text-sm">...</p>
+                         <strong className="block text-[#4a2e1a] text-xs mb-1">{npc.name}</strong>
+                         <p className="animate-pulse text-xs">...</p>
                     </div>
                 </div>
             )}
@@ -74,7 +75,7 @@ const ChatModal: React.FC<ChatModalProps> = ({ npc, chatHistory, messagesSent, i
                     onChange={(e) => setChatInput(e.target.value)}
                     onKeyDown={handleKeyDown}
                     maxLength={200}
-                    className="w-full h-20 p-2 bg-[#f5e8c3] border-2 border-[#654321] text-black resize-none focus:outline-none focus:ring-1 focus:ring-yellow-100 rounded"
+                    className="w-full h-20 p-2 bg-[#f5e8c3] border-2 border-[#654321] text-black resize-none focus:outline-none focus:ring-1 focus:ring-yellow-100 rounded text-xs"
                     placeholder="Type your message... (Enter to send)"
                 />
                 <div className="flex justify-between items-center mt-2 text-xs text-yellow-100">

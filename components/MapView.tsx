@@ -80,11 +80,10 @@ const MapView: React.FC<MapViewProps> = ({ zone, players, activePlayerId, onSele
 
   return (
     <div 
-        className="grid bg-black border-4 border-gray-600"
+        className="grid bg-black border-4 border-gray-600 w-full"
         style={{ 
             gridTemplateColumns: `repeat(${mapSize}, minmax(0, 1fr))`,
-            width: 'clamp(300px, 90vw, 500px)',
-            height: 'clamp(300px, 90vw, 500px)',
+            aspectRatio: '1 / 1',
         }}
     >
       {zone.tileMap.map((row, y) =>

@@ -443,14 +443,13 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState }) => {
   
   const hasActiveMessageQueue = !!messageQueue && messageQueue.length > 0;
   const isDPadDisabled = isChatting || hasActiveMessageQueue;
-  const arePanelButtonsDisabled = isChatting || hasActiveMessageQueue;
+  const arePanelButtonsDisabled = isChatting || hasActiveMessageQueue || !!dialogue;
   const isSwitchPlayerDisabled = isChatting || hasActiveMessageQueue || !!dialogue;
-  const isBackButtonDisabled = isChatting || hasActiveMessageQueue;
+  const isBackButtonDisabled = isChatting;
   const areControlsDimmed = isChatting;
 
-
   return (
-    <div className="flex flex-col md:flex-row gap-4 items-start justify-center">
+    <div className="flex flex-col h-full w-full">
       {showCharSheet && <CharacterSheetModal player={showCharSheet} onClose={() => setShowCharSheet(null)} />}
       {isNpc && <NpcInfoModal npc={selectedObject as NPC} onClose={() => setSelectedObject(null)} />}
       {isItem && <ItemInfoModal item={selectedObject as Item} quest={quests.find(q => q.objective.itemId === (selectedObject as Item).id)} onClose={() => setSelectedObject(null)} />}
@@ -469,11 +468,15 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState }) => {
         />
       )}
       
-      <div className="flex flex-col items-center">
-        <div className="flex gap-4 mb-2">
-            <button disabled={isChatting} onClick={() => setShowCharSheet(players[0])} className="px-3 py-1 bg-green-700 rounded disabled:opacity-50 disabled:cursor-not-allowed">{players[0].name} Lvl {players[0].stats.level}</button>
-            <button disabled={isChatting} onClick={() => setShowCharSheet(players[1])} className="px-3 py-1 bg-purple-700 rounded disabled:opacity-50 disabled:cursor-not-allowed">{players[1].name} Lvl {players[1].stats.level}</button>
-        </div>
+      <div className="flex-shrink-0 flex justify-around items-center">
+          <button disabled={areControlsDimmed} onClick={() => setShowCharSheet(players[0])} className={`px-2 py-1 text-[10px] bg-green-700 rounded ${activePlayerId === 0 ? 'ring-2 ring-white' : ''} disabled:opacity-50`}>{players[0].name} Lvl {players[0].stats.level}</button>
+          <button onClick={switchPlayer} disabled={isSwitchPlayerDisabled} className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-500 border-b-2 border-blue-800 active:border-b-0 disabled:opacity-50 text-base">
+              🔄
+          </button>
+          <button disabled={areControlsDimmed} onClick={() => setShowCharSheet(players[1])} className={`px-2 py-1 text-[10px] bg-purple-700 rounded ${activePlayerId === 1 ? 'ring-2 ring-white' : ''} disabled:opacity-50`}>{players[1].name} Lvl {players[1].stats.level}</button>
+      </div>
+      
+      <div className="flex-grow flex items-center justify-center overflow-hidden relative">
         <MapView 
             zone={currentZone} 
             players={players as [Player, Player]} 
@@ -483,22 +486,21 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState }) => {
         />
       </div>
 
-      <Controls 
-        onMove={handleMove} 
-        onInteract={handleInteract} 
-        onSwitchPlayer={switchPlayer}
-        onBack={handleBack}
-        onInventoryClick={() => setShowInventory(true)}
-        onAbilitiesClick={() => setShowAbilities(true)}
-        onQuestsClick={handleQuestsClick}
-        activePlayerName={activePlayer.name}
-        isDPadDisabled={isDPadDisabled}
-        arePanelButtonsDisabled={arePanelButtonsDisabled}
-        isSwitchPlayerDisabled={isSwitchPlayerDisabled}
-        isBackButtonDisabled={isBackButtonDisabled}
-        areControlsDimmed={areControlsDimmed}
-        hasNewQuest={hasNewQuest}
-      />
+      <div className="flex-shrink-0">
+        <Controls 
+          onMove={handleMove} 
+          onInteract={handleInteract} 
+          onBack={handleBack}
+          onInventoryClick={() => setShowInventory(true)}
+          onAbilitiesClick={() => setShowAbilities(true)}
+          onQuestsClick={handleQuestsClick}
+          isDPadDisabled={isDPadDisabled}
+          arePanelButtonsDisabled={arePanelButtonsDisabled}
+          isBackButtonDisabled={isBackButtonDisabled}
+          areControlsDimmed={areControlsDimmed}
+          hasNewQuest={hasNewQuest}
+        />
+      </div>
     </div>
   );
 };

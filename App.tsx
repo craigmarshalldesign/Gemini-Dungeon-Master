@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback } from 'react';
 import type { GameState, Player, Zone, Item, Quest, ZoneMap } from './types';
 import { GameStatus, ClassType, QuestStatus } from './types';
@@ -160,7 +161,7 @@ const App: React.FC = () => {
 
   const getDmMessage = () => {
     if (gameState.messageQueue && gameState.messageQueue.length > 0) {
-        return `${gameState.dmMessage} (A to continue)`;
+        return `${gameState.messageQueue[0]} (A to continue)`;
     }
     if (gameState.dialogue) {
       const npcName = gameState.dialogue.npc.name;
@@ -171,20 +172,35 @@ const App: React.FC = () => {
     }
     return gameState.dmMessage;
   }
+  
+  const isCharacterCreation = gameState.status === GameStatus.CHARACTER_CREATION;
+  
+  const dmBoxHeight = isCharacterCreation
+    ? ''
+    : gameState.status === GameStatus.PLAYING 
+    ? 'h-24' 
+    : 'h-20';
+  
+  const dmBoxOverflow = isCharacterCreation ? '' : 'overflow-y-auto';
+
+  const contentOverflow = gameState.status === GameStatus.PLAYING ? 'overflow-hidden' : 'overflow-y-auto';
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-4xl border-4 border-gray-600 bg-gray-800 p-2 shadow-lg">
-          <h1 className="text-2xl md:text-3xl text-center mb-2 text-green-400 tracking-widest">{gameState.worldName || 'Gemini Dungeon Master'}</h1>
-          <div className="flex gap-4 items-start mb-4">
-            <div className="flex-grow bg-black text-green-300 p-4 border-2 border-green-500 min-h-[6rem] text-sm md:text-base whitespace-pre-wrap">
-              <p><strong>DM:</strong> {getDmMessage()}</p>
+    <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center font-sans">
+      <div className="w-full max-w-sm h-full max-h-[900px] border-4 border-gray-600 bg-gray-800 shadow-lg flex flex-col" style={{fontFamily: "'Press Start 2P', cursive"}}>
+          <div className="flex-shrink-0 p-2">
+            <div className="flex gap-2 items-start">
+              <div className={`flex-grow bg-black text-green-300 p-2 border-2 border-green-500 ${dmBoxHeight} text-xs whitespace-pre-wrap ${dmBoxOverflow}`}>
+                <p><strong>DM:</strong> {getDmMessage()}</p>
+              </div>
+              {gameState.dialogue && !gameState.isChatting && (
+                  <DialogueMenu dialogueState={gameState.dialogue} />
+              )}
             </div>
-            {gameState.dialogue && !gameState.isChatting && (
-                <DialogueMenu dialogueState={gameState.dialogue} />
-            )}
           </div>
-          {renderContent()}
+          <div className={`flex-grow ${contentOverflow} relative px-2 pb-2`}>
+            {renderContent()}
+          </div>
       </div>
     </div>
   );
