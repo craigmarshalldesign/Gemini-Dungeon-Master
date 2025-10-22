@@ -1,5 +1,3 @@
-
-
 export enum GameStatus {
   WORLD_CREATION,
   CHARACTER_CREATION,
@@ -153,7 +151,6 @@ export interface GameState {
   mainStoryline: string;
   dmMessage: string;
   players: [Player | null, Player | null];
-  worldMap: WorldMap | null;
   currentZone: Zone | null;
   dialogue: DialogueState | null;
   isChatting: boolean;

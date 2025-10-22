@@ -1,12 +1,10 @@
-import { ai } from './geminiClient';
+import { generateWithRetry } from './geminiService';
 import { Type } from "@google/genai";
-import type { WorldMap } from '../types';
 
 interface GameWorldResponse {
     worldName: string;
     mainStoryline: string;
     startingZoneDescription: string;
-    worldMap: WorldMap;
 }
 
 /**
@@ -25,12 +23,10 @@ function extractJson(text: string): string {
 
 export async function generateWorld(prompt: string): Promise<GameWorldResponse> {
     const fullPrompt = `You are a Dungeon Master for a D&D style game. A player wants to start a new adventure. Their initial idea is: '${prompt}'. 
-    Based on this, generate a concise main storyline, a compelling name for the world, and a description of the starting zone. 
-    Also, create a 10x10 world map grid. Each cell must have a 'terrain' type (e.g., 'forest', 'plains', 'mountains', 'town', 'dungeon_entrance') and a short 'name'.
-    The player will start at coordinate [0,0].
+    Based on this, generate a concise main storyline, a compelling name for the world, and a one-paragraph description of the starting zone.
     Return the response as a JSON object.`;
 
-    const response = await ai.models.generateContent({
+    const response = await generateWithRetry({
         model: 'gemini-2.5-flash',
         contents: fullPrompt,
         config: {
@@ -41,22 +37,8 @@ export async function generateWorld(prompt: string): Promise<GameWorldResponse> 
                     worldName: { type: Type.STRING },
                     mainStoryline: { type: Type.STRING },
                     startingZoneDescription: { type: Type.STRING },
-                    worldMap: {
-                        type: Type.ARRAY,
-                        items: {
-                            type: Type.ARRAY,
-                            items: {
-                                type: Type.OBJECT,
-                                properties: {
-                                    terrain: { type: Type.STRING },
-                                    name: { type: Type.STRING },
-                                },
-                                required: ['terrain', 'name']
-                            }
-                        }
-                    }
                 },
-                required: ['worldName', 'mainStoryline', 'startingZoneDescription', 'worldMap']
+                required: ['worldName', 'mainStoryline', 'startingZoneDescription']
             }
         }
     });

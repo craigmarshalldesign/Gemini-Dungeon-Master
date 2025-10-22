@@ -1,9 +1,8 @@
-
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import type { GameState, Player, Zone, Item, Quest, ZoneMap } from './types';
 import { GameStatus, ClassType, QuestStatus } from './types';
 import { generateWorld } from './services/worldService';
-import { generateZone } from './services/zoneService';
+import { generateZoneLayout, populateZone } from './services/zoneService';
 import { CHARACTER_CLASSES } from './constants';
 import GameCreationScreen from './components/GameCreationScreen';
 import CharacterCreationScreen from './components/CharacterCreationScreen';
@@ -17,7 +16,6 @@ const initialGameState: GameState = {
   mainStoryline: '',
   dmMessage: 'Welcome, adventurer. A new world awaits your story.',
   players: [null, null],
-  worldMap: null,
   currentZone: null,
   dialogue: null,
   isChatting: false,
@@ -87,32 +85,36 @@ const App: React.FC = () => {
         error: null, 
         dmMessage: 'The cosmos stirs... a new world is being born...',
         loadingProgress: 0,
-        loadingMessage: 'Harnessing primordial chaos...'
+        loadingMessage: 'Imagining a new world...'
     }));
     
     try {
-      setGameState(prev => ({ ...prev, loadingProgress: 20, loadingMessage: 'Generating world history...' }));
+      // Step 1: Generate the core world narrative
       const worldData = await generateWorld(prompt);
+      setGameState(prev => ({ ...prev, loadingProgress: 33, loadingMessage: 'Drawing the landscape...' }));
       
-      setGameState(prev => ({ ...prev, loadingProgress: 60, loadingMessage: 'Carving out the starting zone...' }));
-      const zoneData = await generateZone(worldData.startingZoneDescription, worldData.worldName, worldData.mainStoryline);
-      
-      setGameState(prev => ({ ...prev, loadingProgress: 95, loadingMessage: 'Breathing life into the inhabitants...' }));
-      const activeQuests: Quest[] = [];
+      // Step 2: Generate the zone layout (map)
+      const layoutData = await generateZoneLayout(worldData.startingZoneDescription);
+      setGameState(prev => ({ ...prev, loadingProgress: 66, loadingMessage: 'Breathing life into the world...' }));
 
-      zoneData.npcs.forEach(npc => {
+      // Step 3: Populate the zone with NPCs, quests, and an exit
+      const populationData = await populateZone(worldData.worldName, worldData.mainStoryline, layoutData.tileMap);
+      setGameState(prev => ({ ...prev, loadingProgress: 95, loadingMessage: 'Finalizing details...' }));
+
+      const activeQuests: Quest[] = [];
+      populationData.npcs.forEach(npc => {
         if (npc.quest) {
           activeQuests.push(npc.quest);
         }
       });
 
       const startingZone: Zone = {
-        name: zoneData.zoneName,
+        name: layoutData.zoneName,
         description: worldData.startingZoneDescription,
-        tileMap: zoneData.tileMap,
-        npcs: zoneData.npcs,
+        tileMap: layoutData.tileMap,
+        npcs: populationData.npcs,
         items: [], // Quest items will be spawned when quests are accepted
-        exitPosition: zoneData.exitPosition,
+        exitPosition: populationData.exitPosition,
       };
 
       setGameState(prev => ({
@@ -120,7 +122,6 @@ const App: React.FC = () => {
         status: GameStatus.CHARACTER_CREATION,
         worldName: worldData.worldName,
         mainStoryline: worldData.mainStoryline,
-        worldMap: worldData.worldMap,
         currentZone: startingZone,
         quests: activeQuests,
         dmMessage: `Welcome to ${worldData.worldName}. The story is: ${worldData.mainStoryline}`,

@@ -1,4 +1,4 @@
-import { ai } from './geminiClient';
+import { ai, generateWithRetry } from './geminiService';
 import type { NPC, Player, DisplayChatMessage, Quest } from '../types';
 import type { Chat, Content } from '@google/genai';
 
@@ -88,7 +88,7 @@ export async function generateDialogue(
     `;
 
     try {
-        const response = await ai.models.generateContent({
+        const response = await generateWithRetry({
             model: 'gemini-2.5-flash',
             contents: prompt,
         });
