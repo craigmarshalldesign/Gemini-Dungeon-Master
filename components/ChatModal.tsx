@@ -37,9 +37,12 @@ const ChatModal: React.FC<ChatModalProps> = ({ npc, chatHistory, messagesSent, i
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+    <div 
+        className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4" 
+        style={{ height: '100dvh' }}
+    >
       <div 
-        className="bg-[#c2b280] text-black border-8 border-[#654321] rounded-lg max-w-lg w-full shadow-lg h-[90vh] flex flex-col"
+        className="bg-[#c2b280] text-black border-8 border-[#654321] rounded-lg max-w-lg w-full shadow-lg max-h-full flex flex-col"
         onClick={(e) => e.stopPropagation()}
         style={{ imageRendering: 'pixelated' }}
       >
