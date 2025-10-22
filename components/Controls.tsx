@@ -16,15 +16,20 @@ interface ControlsProps {
 }
 
 const DPadButton: React.FC<{
-  onClick: () => void;
+  onPress: () => void;
+  onRelease: () => void;
   children: React.ReactNode;
   className?: string;
   disabled?: boolean;
-}> = ({ onClick, children, className, disabled }) => (
+}> = ({ onPress, onRelease, children, className, disabled }) => (
   <button
-    onClick={onClick}
+    onMouseDown={onPress}
+    onMouseUp={onRelease}
+    onMouseLeave={onRelease}
+    onTouchStart={(e) => { e.preventDefault(); onPress(); }}
+    onTouchEnd={onRelease}
     disabled={disabled}
-    className={`w-10 h-10 bg-gray-700 hover:bg-gray-600 active:bg-gray-800 flex items-center justify-center text-white text-xl disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
+    className={`w-10 h-10 bg-gray-700 hover:bg-gray-600 active:bg-gray-900 active:scale-95 transform transition-transform flex items-center justify-center text-white text-xl disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
   >
     {children}
   </button>
@@ -75,15 +80,45 @@ const Controls: React.FC<ControlsProps> = ({
     areControlsDimmed,
     hasNewQuest,
 }) => {
+  const moveIntervalRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  React.useEffect(() => {
+    // Cleanup interval on component unmount
+    return () => {
+        if (moveIntervalRef.current) {
+            clearInterval(moveIntervalRef.current);
+        }
+    };
+  }, []);
+
+  const handleMovePress = (dx: number, dy: number) => {
+      if (isDPadDisabled) return;
+      
+      handleMoveRelease(); // Clear any existing interval
+      onMove(dx, dy); // Move once immediately
+      
+      moveIntervalRef.current = setInterval(() => {
+          onMove(dx, dy);
+      }, 150); // Move every 150ms
+  };
+
+  const handleMoveRelease = () => {
+      if (moveIntervalRef.current) {
+          clearInterval(moveIntervalRef.current);
+          moveIntervalRef.current = null;
+      }
+  };
+
+
   return (
     <div className={`flex justify-around items-end py-2 ${areControlsDimmed ? 'opacity-50' : ''}`}>
       {/* D-Pad */}
       <div className="grid grid-cols-3 grid-rows-3 w-30 h-30">
-        <DPadButton onClick={() => onMove(0, -1)} disabled={isDPadDisabled} className="col-start-2 rounded-t-lg">▲</DPadButton>
-        <DPadButton onClick={() => onMove(-1, 0)} disabled={isDPadDisabled} className="row-start-2 rounded-l-lg">◀</DPadButton>
+        <DPadButton onPress={() => handleMovePress(0, -1)} onRelease={handleMoveRelease} disabled={isDPadDisabled} className="col-start-2 rounded-t-lg">▲</DPadButton>
+        <DPadButton onPress={() => handleMovePress(-1, 0)} onRelease={handleMoveRelease} disabled={isDPadDisabled} className="row-start-2 rounded-l-lg">◀</DPadButton>
         <div className="col-start-2 row-start-2 bg-gray-700"></div>
-        <DPadButton onClick={() => onMove(1, 0)} disabled={isDPadDisabled} className="col-start-3 row-start-2 rounded-r-lg">▶</DPadButton>
-        <DPadButton onClick={() => onMove(0, 1)} disabled={isDPadDisabled} className="col-start-2 row-start-3 rounded-b-lg">▼</DPadButton>
+        <DPadButton onPress={() => handleMovePress(1, 0)} onRelease={handleMoveRelease} disabled={isDPadDisabled} className="col-start-3 row-start-2 rounded-r-lg">▶</DPadButton>
+        <DPadButton onPress={() => handleMovePress(0, 1)} onRelease={handleMoveRelease} disabled={isDPadDisabled} className="col-start-2 row-start-3 rounded-b-lg">▼</DPadButton>
       </div>
       
       {/* Right Side Buttons */}

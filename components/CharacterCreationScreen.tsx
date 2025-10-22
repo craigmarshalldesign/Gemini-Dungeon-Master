@@ -21,20 +21,32 @@ const CharacterCreationScreen: React.FC<CharacterCreationScreenProps> = ({ onCre
     }
   };
 
-  const ClassSelector: React.FC<{ selectedClass: ClassType; onSelect: (c: ClassType) => void }> = ({ selectedClass, onSelect }) => (
-    <div className="flex gap-2">
-      {Object.values(ClassType).map(c => (
-        <button
-          key={c}
-          type="button"
-          onClick={() => onSelect(c)}
-          className={`px-4 py-1 text-sm border-2 ${selectedClass === c ? 'bg-green-500 border-white text-black' : 'bg-gray-700 border-gray-500 text-white'}`}
-        >
-          {c}
-        </button>
-      ))}
-    </div>
-  );
+  const ClassSelector: React.FC<{ selectedClass: ClassType; onSelect: (c: ClassType) => void }> = ({ selectedClass, onSelect }) => {
+    const isWarrior = selectedClass === ClassType.WARRIOR;
+    return (
+        <div className="relative flex w-full bg-gray-900 rounded-full p-1 border-2 border-gray-700">
+            <div
+                className="absolute top-0 bottom-0 left-0 w-1/2 bg-green-500 rounded-full transition-transform duration-300 ease-in-out"
+                style={{ transform: isWarrior ? 'translateX(0%)' : 'translateX(100%)' }}
+            />
+            <button
+                type="button"
+                onClick={() => onSelect(ClassType.WARRIOR)}
+                className={`flex-1 text-center py-1 text-sm z-10 rounded-full transition-colors duration-200 ${isWarrior ? 'text-black font-bold' : 'text-white'}`}
+            >
+                {ClassType.WARRIOR}
+            </button>
+            <button
+                type="button"
+                onClick={() => onSelect(ClassType.WIZARD)}
+                className={`flex-1 text-center py-1 text-sm z-10 rounded-full transition-colors duration-200 ${!isWarrior ? 'text-black font-bold' : 'text-white'}`}
+            >
+                {ClassType.WIZARD}
+            </button>
+        </div>
+    );
+  };
+
 
   return (
     <form onSubmit={handleSubmit} className="p-4 bg-black border-2 border-gray-600 h-full rounded-lg">

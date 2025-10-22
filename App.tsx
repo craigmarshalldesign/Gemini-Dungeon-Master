@@ -35,7 +35,7 @@ const initialGameState: GameState = {
 const App: React.FC = () => {
   const [gameState, setGameState] = useState<GameState>(initialGameState);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const appRef = useRef<HTMLDivElement>(null);
+  const fullscreenWrapperRef = useRef<HTMLDivElement>(null);
 
   const handleFullscreenChange = useCallback(() => {
     setIsFullscreen(!!document.fullscreenElement);
@@ -47,10 +47,10 @@ const App: React.FC = () => {
   }, [handleFullscreenChange]);
 
   const toggleFullscreen = useCallback(async () => {
-    if (!appRef.current) return;
+    if (!fullscreenWrapperRef.current) return;
     try {
       if (!document.fullscreenElement) {
-        await appRef.current.requestFullscreen();
+        await fullscreenWrapperRef.current.requestFullscreen();
         // FIX: The 'lock' property is not in the default ScreenOrientation type.
         // Cast to any to bypass the TypeScript error for this experimental feature.
         if ((window.screen?.orientation as any)?.lock) {
@@ -266,10 +266,12 @@ const App: React.FC = () => {
   const dmBoxOverflow = isCharacterCreation ? '' : 'overflow-y-auto';
 
   const contentOverflow = gameState.status === GameStatus.PLAYING ? 'overflow-hidden' : 'overflow-y-auto';
+  
+  const containerMaxWidth = gameState.status === GameStatus.PLAYING ? 'md:max-w-sm' : 'md:max-w-xl';
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex flex-col md:items-center md:justify-center font-sans">
-      <div ref={appRef} className="w-full h-[100dvh] md:h-auto md:max-w-sm md:max-h-[900px] border-4 border-gray-600 bg-gray-800 shadow-lg flex flex-col" style={{fontFamily: "'Press Start 2P', cursive"}}>
+    <div ref={fullscreenWrapperRef} className="min-h-screen bg-gray-900 text-white flex flex-col md:items-center md:justify-center font-sans">
+      <div className={`w-full h-[100dvh] md:h-auto ${containerMaxWidth} md:max-h-[900px] border-4 border-gray-600 bg-gray-800 shadow-lg flex flex-col`} style={{fontFamily: "'Press Start 2P', cursive"}}>
           <div className="flex-shrink-0 p-2">
             <div className="flex gap-2 items-start">
               <div className={`flex-grow bg-black text-green-300 p-2 border-2 border-green-500 ${dmBoxHeight} text-xs whitespace-pre-wrap ${dmBoxOverflow}`}>
