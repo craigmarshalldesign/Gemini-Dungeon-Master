@@ -1,3 +1,4 @@
+
 import React from 'react';
 
 interface ControlsProps {
@@ -13,6 +14,7 @@ interface ControlsProps {
   isBackButtonDisabled?: boolean;
   areControlsDimmed?: boolean;
   hasNewQuest?: boolean;
+  pressedKeys: Set<string>;
 }
 
 const DPadButton: React.FC<{
@@ -21,34 +23,71 @@ const DPadButton: React.FC<{
   children: React.ReactNode;
   className?: string;
   disabled?: boolean;
-}> = ({ onPress, onRelease, children, className, disabled }) => (
-  <button
-    onMouseDown={onPress}
-    onMouseUp={onRelease}
-    onMouseLeave={onRelease}
-    onTouchStart={(e) => { e.preventDefault(); onPress(); }}
-    onTouchEnd={onRelease}
-    disabled={disabled}
-    className={`w-10 h-10 bg-gray-700 hover:bg-gray-600 active:bg-gray-900 active:scale-95 transform transition-transform flex items-center justify-center text-white text-xl disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
-  >
-    {children}
-  </button>
-);
+  isKeyboardActive?: boolean;
+}> = ({ onPress, onRelease, children, className, disabled, isKeyboardActive }) => {
+    const [isPointerDown, setIsPointerDown] = React.useState(false);
+    const isActive = !disabled && (isPointerDown || isKeyboardActive);
+
+    const handlePointerDown = (e: React.MouseEvent | React.TouchEvent) => {
+        if ('preventDefault' in e) e.preventDefault();
+        setIsPointerDown(true);
+        onPress();
+    };
+
+    const handlePointerUp = () => {
+        setIsPointerDown(false);
+        onRelease();
+    };
+
+    return (
+        <button
+            onMouseDown={handlePointerDown}
+            onMouseUp={handlePointerUp}
+            onMouseLeave={handlePointerUp}
+            onTouchStart={handlePointerDown}
+            onTouchEnd={handlePointerUp}
+            disabled={disabled}
+            className={`w-10 h-10 hover:bg-gray-600 transform transition-transform flex items-center justify-center text-white text-xl disabled:opacity-50 disabled:cursor-not-allowed select-none ${isActive ? 'bg-gray-900 scale-95' : 'bg-gray-700'} ${className}`}
+        >
+            {children}
+        </button>
+    );
+};
 
 const ActionButton: React.FC<{
   onClick: () => void;
   label: string;
   className?: string;
   disabled?: boolean;
-}> = ({ onClick, label, className, disabled }) => (
-  <button
-    onClick={onClick}
-    disabled={disabled}
-    className={`w-14 h-14 rounded-full flex items-center justify-center text-xl font-bold border-4 disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
-  >
-    {label}
-  </button>
-);
+  isKeyboardActive?: boolean;
+}> = ({ onClick, label, className, disabled, isKeyboardActive }) => {
+    const [isPointerDown, setIsPointerDown] = React.useState(false);
+    const isActive = !disabled && (isPointerDown || isKeyboardActive);
+
+    const handlePointerDown = (e: React.MouseEvent | React.TouchEvent) => {
+        if ('preventDefault' in e) e.preventDefault();
+        setIsPointerDown(true);
+    };
+
+    const handlePointerUp = () => {
+        setIsPointerDown(false);
+    };
+
+    return (
+        <button
+            onClick={onClick}
+            onMouseDown={handlePointerDown}
+            onMouseUp={handlePointerUp}
+            onMouseLeave={handlePointerUp}
+            onTouchStart={handlePointerDown}
+            onTouchEnd={handlePointerUp}
+            disabled={disabled}
+            className={`w-14 h-14 rounded-full flex items-center justify-center text-xl font-bold border-4 disabled:opacity-50 disabled:cursor-not-allowed transition-transform transform ${isActive ? 'scale-90 brightness-125' : ''} ${className}`}
+        >
+            {label}
+        </button>
+    );
+};
 
 const IconButton: React.FC<{
   onClick: () => void;
@@ -79,6 +118,7 @@ const Controls: React.FC<ControlsProps> = ({
     isBackButtonDisabled,
     areControlsDimmed,
     hasNewQuest,
+    pressedKeys,
 }) => {
   const moveIntervalRef = React.useRef<NodeJS.Timeout | null>(null);
 
@@ -99,7 +139,7 @@ const Controls: React.FC<ControlsProps> = ({
       
       moveIntervalRef.current = setInterval(() => {
           onMove(dx, dy);
-      }, 150); // Move every 150ms
+      }, 50); // Fire events rapidly for high responsiveness
   };
 
   const handleMoveRelease = () => {
@@ -114,11 +154,11 @@ const Controls: React.FC<ControlsProps> = ({
     <div className={`flex justify-around items-end py-2 ${areControlsDimmed ? 'opacity-50' : ''}`}>
       {/* D-Pad */}
       <div className="grid grid-cols-3 grid-rows-3 w-30 h-30">
-        <DPadButton onPress={() => handleMovePress(0, -1)} onRelease={handleMoveRelease} disabled={isDPadDisabled} className="col-start-2 rounded-t-lg">▲</DPadButton>
-        <DPadButton onPress={() => handleMovePress(-1, 0)} onRelease={handleMoveRelease} disabled={isDPadDisabled} className="row-start-2 rounded-l-lg">◀</DPadButton>
+        <DPadButton onPress={() => handleMovePress(0, -1)} onRelease={handleMoveRelease} disabled={isDPadDisabled} className="col-start-2 rounded-t-lg" isKeyboardActive={pressedKeys.has('w')}>▲</DPadButton>
+        <DPadButton onPress={() => handleMovePress(-1, 0)} onRelease={handleMoveRelease} disabled={isDPadDisabled} className="row-start-2 rounded-l-lg" isKeyboardActive={pressedKeys.has('a')}>◀</DPadButton>
         <div className="col-start-2 row-start-2 bg-gray-700"></div>
-        <DPadButton onPress={() => handleMovePress(1, 0)} onRelease={handleMoveRelease} disabled={isDPadDisabled} className="col-start-3 row-start-2 rounded-r-lg">▶</DPadButton>
-        <DPadButton onPress={() => handleMovePress(0, 1)} onRelease={handleMoveRelease} disabled={isDPadDisabled} className="col-start-2 row-start-3 rounded-b-lg">▼</DPadButton>
+        <DPadButton onPress={() => handleMovePress(1, 0)} onRelease={handleMoveRelease} disabled={isDPadDisabled} className="col-start-3 row-start-2 rounded-r-lg" isKeyboardActive={pressedKeys.has('d')}>▶</DPadButton>
+        <DPadButton onPress={() => handleMovePress(0, 1)} onRelease={handleMoveRelease} disabled={isDPadDisabled} className="col-start-2 row-start-3 rounded-b-lg" isKeyboardActive={pressedKeys.has('s')}>▼</DPadButton>
       </div>
       
       {/* Right Side Buttons */}
@@ -141,8 +181,8 @@ const Controls: React.FC<ControlsProps> = ({
               <IconButton onClick={onSettingsClick} disabled={areControlsDimmed}>
                 <span className="text-2xl">⚙️</span>
               </IconButton>
-              <ActionButton onClick={onBack} label="B" className="bg-red-700 text-white border-red-900" disabled={isBackButtonDisabled} />
-              <ActionButton onClick={onInteract} label="A" className="bg-green-600 text-white border-green-800" />
+              <ActionButton onClick={onBack} label="B" className="bg-red-700 text-white border-red-900" disabled={isBackButtonDisabled} isKeyboardActive={pressedKeys.has('r')} />
+              <ActionButton onClick={onInteract} label="A" className="bg-green-600 text-white border-green-800" isKeyboardActive={pressedKeys.has('e')} />
           </div>
       </div>
     </div>

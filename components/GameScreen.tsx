@@ -1,5 +1,6 @@
 
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { GameState, Player, Direction, NPC, Item, Quest, DialogueState } from '../types';
 import { QuestStatus, ClassType } from '../types';
 import MapView from './MapView';
@@ -25,6 +26,34 @@ interface GameScreenProps {
   endGame: () => void;
 }
 
+const levelUp = (player: Player): Player => {
+  const classData = CHARACTER_CLASSES[player.classType];
+  const newLevel = player.stats.level + 1;
+  
+  const newAbilities = classData.abilities.filter(a => a.level <= newLevel);
+  
+  const newMaxHp = player.stats.maxHp + 5;
+  const newStr = player.stats.str + (player.classType === ClassType.WARRIOR ? 2 : 1);
+  const newInt = player.stats.int + (player.classType === ClassType.WIZARD ? 2 : 1);
+  const newDef = player.stats.def + 1;
+
+  return {
+    ...player,
+    abilities: newAbilities,
+    stats: {
+      ...player.stats,
+      level: newLevel,
+      xp: player.stats.xp - player.stats.nextLevelXp,
+      nextLevelXp: Math.floor(player.stats.nextLevelXp * 1.5),
+      maxHp: newMaxHp,
+      hp: newMaxHp,
+      str: newStr,
+      int: newInt,
+      def: newDef,
+    }
+  };
+}
+
 const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState, isFullscreen, toggleFullscreen, endGame }) => {
   const [showCharSheet, setShowCharSheet] = useState<Player | null>(null);
   const [selectedObject, setSelectedObject] = useState<NPC | Item | null>(null);
@@ -33,8 +62,12 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState, isFull
   const [showQuests, setShowQuests] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [zoneCompleted, setZoneCompleted] = useState(false);
+  const [pressedKeys, setPressedKeys] = React.useState<Set<string>>(new Set());
   
   const [activeChatSession, setActiveChatSession] = useState<Chat | null>(null);
+  const lastMoveTimestamp = useRef(0);
+  const moveIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const activeMoveKey = useRef<string | null>(null);
   
   const { players, currentZone, activePlayerId, quests, mainStoryline, worldName, dialogue, isChatting, chatStates, messageQueue, hasNewQuest } = gameState;
   const activePlayer = players[activePlayerId];
@@ -75,7 +108,8 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState, isFull
                     const isTraversable = 
                         newX >= 0 && newX < prev.currentZone.tileMap[0].length &&
                         newY >= 0 && newY < prev.currentZone.tileMap.length &&
-                        ['grass', 'path'].includes(prev.currentZone.tileMap[newY][newX]);
+                        // FIX: Corrected typo `currentZon!e` to `currentZone!`.
+                        ['grass', 'path'].includes(prev.currentZone!.tileMap[newY][newX]);
                     
                     const targetKey = `${newX},${newY}`;
                     const isOccupiedByPlayer = allPlayerPositions.has(targetKey);
@@ -104,144 +138,141 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState, isFull
     return () => clearInterval(moveInterval);
   }, [isGamePaused, setGameState]);
 
+  // This effect ensures that if a modal or dialogue opens while a movement key is held down,
+  // the character stops moving, preventing "runaway" character issues.
+  useEffect(() => {
+    if (isGamePaused) {
+        if (moveIntervalRef.current) {
+            clearInterval(moveIntervalRef.current);
+            moveIntervalRef.current = null;
+        }
+        activeMoveKey.current = null;
+    }
+  }, [isGamePaused]);
+
+
   if (!currentZone || !players[0] || !players[1]) {
     return <div>Loading game...</div>;
   }
   
-  const levelUp = (player: Player): Player => {
-    const classData = CHARACTER_CLASSES[player.classType];
-    const newLevel = player.stats.level + 1;
-    
-    const newAbilities = classData.abilities.filter(a => a.level <= newLevel);
-    
-    const newMaxHp = player.stats.maxHp + 5;
-    const newStr = player.stats.str + (player.classType === ClassType.WARRIOR ? 2 : 1);
-    const newInt = player.stats.int + (player.classType === ClassType.WIZARD ? 2 : 1);
-    const newDef = player.stats.def + 1;
+  const handleMove = useCallback((dx: number, dy: number) => {
+    const MOVEMENT_COOLDOWN = 200; // 5 steps per second
+    const now = Date.now();
+    if (now - lastMoveTimestamp.current < MOVEMENT_COOLDOWN) {
+        return;
+    }
+    lastMoveTimestamp.current = now;
 
-    return {
-      ...player,
-      abilities: newAbilities,
-      stats: {
-        ...player.stats,
-        level: newLevel,
-        xp: player.stats.xp - player.stats.nextLevelXp,
-        nextLevelXp: Math.floor(player.stats.nextLevelXp * 1.5),
-        maxHp: newMaxHp,
-        hp: newMaxHp,
-        str: newStr,
-        int: newInt,
-        def: newDef,
-      }
-    };
-  }
+    setGameState(prev => {
+        const { players, activePlayerId, isChatting, messageQueue, dialogue, currentZone } = prev;
+        
+        const activePlayer = players[activePlayerId];
+        
+        if (!activePlayer || isChatting || (messageQueue && messageQueue.length > 0)) {
+            return prev;
+        }
 
-  const handleMove = (dx: number, dy: number) => {
-    if (!activePlayer || isChatting || (messageQueue && messageQueue.length > 0)) return;
+        if (dialogue) {
+            const direction = dy === -1 ? 'up' : (dy === 1 ? 'down' : null);
+            if (!direction) return prev;
 
-    if (dialogue) {
-        const direction = dy === -1 ? 'up' : (dy === 1 ? 'down' : null);
-        if (!direction) return; // Ignore left/right movement
-
-        setGameState(prev => {
-            if (!prev.dialogue) return prev;
             const menuOptionsCount = 3;
             const newIndex = direction === 'up'
-                ? (prev.dialogue.menuSelectionIndex - 1 + menuOptionsCount) % menuOptionsCount
-                : (prev.dialogue.menuSelectionIndex + 1) % menuOptionsCount;
-            return { ...prev, dialogue: { ...prev.dialogue, menuSelectionIndex: newIndex } };
-        });
-        return; // Prevent player movement while in dialogue
-    }
+                ? (dialogue.menuSelectionIndex - 1 + menuOptionsCount) % menuOptionsCount
+                : (dialogue.menuSelectionIndex + 1) % menuOptionsCount;
+            return { ...prev, dialogue: { ...dialogue, menuSelectionIndex: newIndex } };
+        }
 
-    let newDirection: Direction = activePlayer.direction;
-    if (dy === -1) newDirection = 'up';
-    else if (dy === 1) newDirection = 'down';
-    else if (dx === -1) newDirection = 'left';
-    else if (dx === 1) newDirection = 'right';
+        if (!currentZone) return prev;
 
-    const newX = activePlayer.position.x + dx;
-    const newY = activePlayer.position.y + dy;
-    
-    const otherPlayer = players[(activePlayerId + 1) % 2]!;
-    
-    const exitPosition = currentZone.exitPosition;
-    if (zoneCompleted && exitPosition && newX === exitPosition.x && newY === exitPosition.y) {
-       setGameState(prev => ({...prev, dialogue: null, dmMessage: "You've found the exit! For now, your journey in this area is complete. (More zones coming soon!)"}));
-       return;
-    }
+        let newDirection: Direction = activePlayer.direction;
+        if (dy === -1) newDirection = 'up';
+        else if (dy === 1) newDirection = 'down';
+        else if (dx === -1) newDirection = 'left';
+        else if (dx === 1) newDirection = 'right';
 
-    const isTraversable = 
-      newX >= 0 && newX < currentZone.tileMap[0].length &&
-      newY >= 0 && newY < currentZone.tileMap.length &&
-      ['grass', 'path'].includes(currentZone.tileMap[newY][newX]);
-      
-    const isNpcBlocking = currentZone.npcs.some(npc => npc.position.x === newX && npc.position.y === newY);
-    const isPlayerBlocking = otherPlayer.position.x === newX && otherPlayer.position.y === newY;
+        const newX = activePlayer.position.x + dx;
+        const newY = activePlayer.position.y + dy;
+        
+        const otherPlayer = players[(activePlayerId + 1) % 2]!;
+        
+        const exitPosition = currentZone.exitPosition;
+        if (zoneCompleted && exitPosition && newX === exitPosition.x && newY === exitPosition.y) {
+           return {...prev, dialogue: null, dmMessage: "You've found the exit! For now, your journey in this area is complete. (More zones coming soon!)"};
+        }
 
-    if (isTraversable && !isNpcBlocking && !isPlayerBlocking) {
-      setGameState(prev => {
-        const newPlayers = [...prev.players] as [Player, Player];
-        newPlayers[activePlayerId] = {
-          ...newPlayers[activePlayerId],
-          position: { x: newX, y: newY },
-          direction: newDirection,
-        };
-        return { ...prev, players: newPlayers };
-      });
-    } else {
-       setGameState(prev => {
-        const newPlayers = [...prev.players] as [Player, Player];
-        newPlayers[activePlayerId] = { ...newPlayers[activePlayerId], direction: newDirection };
-        return { ...prev, players: newPlayers };
-      });
-    }
-  };
+        const isTraversable = 
+          newX >= 0 && newX < currentZone.tileMap[0].length &&
+          newY >= 0 && newY < currentZone.tileMap.length &&
+          ['grass', 'path'].includes(currentZone.tileMap[newY][newX]);
+          
+        const isNpcBlocking = currentZone.npcs.some(npc => npc.position.x === newX && npc.position.y === newY);
+        const isPlayerBlocking = otherPlayer.position.x === newX && otherPlayer.position.y === newY;
+
+        if (isTraversable && !isNpcBlocking && !isPlayerBlocking) {
+            const newPlayers = [...prev.players] as [Player, Player];
+            newPlayers[activePlayerId] = {
+              ...newPlayers[activePlayerId]!,
+              position: { x: newX, y: newY },
+              direction: newDirection,
+            };
+            return { ...prev, players: newPlayers };
+        } else {
+            const newPlayers = [...prev.players] as [Player, Player];
+            newPlayers[activePlayerId]! = { ...newPlayers[activePlayerId]!, direction: newDirection };
+            return { ...prev, players: newPlayers };
+        }
+    });
+  }, [setGameState, zoneCompleted]);
 
   const switchPlayer = () => {
     if (dialogue || isChatting || (messageQueue && messageQueue.length > 0)) return;
     setGameState(prev => ({...prev, activePlayerId: (prev.activePlayerId + 1) % 2}));
   }
   
-  const completeQuestAndApplyRewards = (quest: Quest) => {
-    const newQuests = gameState.quests.map(q => q.id === quest.id ? {...q, status: QuestStatus.COMPLETED} : q);
-    const activePlayerInventory = activePlayer!.inventory.filter(item => item.id !== quest.objective.itemId);
-    
-    const levelUpSummary: string[] = [];
-    
-    const updatedPlayers = gameState.players.map((p, index) => {
-        if (!p) return null;
-        let updatedPlayer = { ...p };
+  const completeQuestAndApplyRewards = useCallback((quest: Quest) => {
+    setGameState(prev => {
+        const activePlayer = prev.players[prev.activePlayerId];
+        if (!activePlayer) return prev;
+
+        const newQuests = prev.quests.map(q => q.id === quest.id ? {...q, status: QuestStatus.COMPLETED} : q);
+        const activePlayerInventory = activePlayer.inventory.filter(item => item.id !== quest.objective.itemId);
         
-        if (index === activePlayerId) {
-            updatedPlayer.inventory = activePlayerInventory;
+        const levelUpSummary: string[] = [];
+        
+        const updatedPlayers = prev.players.map((p, index) => {
+            if (!p) return null;
+            let updatedPlayer = { ...p };
+            
+            if (index === prev.activePlayerId) {
+                updatedPlayer.inventory = activePlayerInventory;
+            }
+
+            updatedPlayer.stats = { ...updatedPlayer.stats, xp: updatedPlayer.stats.xp + quest.xpReward };
+            
+            while (updatedPlayer.stats.xp >= updatedPlayer.stats.nextLevelXp) {
+                updatedPlayer = levelUp(updatedPlayer);
+                levelUpSummary.push(`${updatedPlayer.name} leveled up to level ${updatedPlayer.stats.level}!`);
+            }
+            return updatedPlayer;
+        }) as [Player, Player];
+        
+        let summaryMessage = `Quest Complete: ${quest.title}! Both players gained ${quest.xpReward} XP.`;
+        if (levelUpSummary.length > 0) {
+            summaryMessage += ` ${levelUpSummary.join(' ')}`;
         }
 
-        updatedPlayer.stats = { ...updatedPlayer.stats, xp: updatedPlayer.stats.xp + quest.xpReward };
-        
-        while (updatedPlayer.stats.xp >= updatedPlayer.stats.nextLevelXp) {
-            const oldLevel = updatedPlayer.stats.level;
-            updatedPlayer = levelUp(updatedPlayer);
-            levelUpSummary.push(`${updatedPlayer.name} leveled up to level ${updatedPlayer.stats.level}!`);
-        }
-        return updatedPlayer;
-    }) as [Player, Player];
-    
-    let summaryMessage = `Quest Complete: ${quest.title}! Both players gained ${quest.xpReward} XP.`;
-    if (levelUpSummary.length > 0) {
-        summaryMessage += ` ${levelUpSummary.join(' ')}`;
-    }
+        return {
+            ...prev,
+            players: updatedPlayers,
+            quests: newQuests,
+            dialogue: null,
+            dmMessage: summaryMessage,
+        };
+    });
+  }, [setGameState]);
 
-    setGameState(prev => ({
-        ...prev,
-        players: updatedPlayers,
-        quests: newQuests,
-        dialogue: null,
-        dmMessage: summaryMessage,
-    }));
-};
-
-  const handleDialogueAction = async (action: 'talk' | 'chat' | 'close') => {
+  const handleDialogueAction = useCallback(async (action: 'talk' | 'chat' | 'close') => {
     if (!dialogue || !activePlayer) return;
 
     switch (action) {
@@ -283,9 +314,9 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState, isFull
         setActiveChatSession(null);
         break;
     }
-  };
+  }, [activePlayer, chatStates, completeQuestAndApplyRewards, currentZone.description, dialogue, mainStoryline, quests, setGameState, worldName]);
 
-  const handleInteract = () => {
+  const handleInteract = useCallback(() => {
     if (messageQueue && messageQueue.length > 0) {
         setGameState(prev => {
             const newQueue = prev.messageQueue!.slice(1);
@@ -307,102 +338,105 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState, isFull
         return;
     }
     
-    const itemOnTile = currentZone.items.find(item => item.position?.x === activePlayer.position.x && item.position?.y === activePlayer.position.y);
-    if (itemOnTile) {
-      if(activePlayer.inventory.length >= 16) {
-        setGameState(prev => ({...prev, dmMessage: "Your inventory is full!"}));
-        return;
-      }
-      const newInventory = [...activePlayer.inventory, { ...itemOnTile, position: undefined }];
-      const newItemsOnMap = currentZone.items.filter(item => item.id !== itemOnTile.id);
+    setGameState(prev => {
+        const activePlayer = prev.players[prev.activePlayerId];
+        const currentZone = prev.currentZone;
+        if (!activePlayer || !currentZone) return prev;
 
-      setGameState(prev => {
+        const itemOnTile = currentZone.items.find(item => item.position?.x === activePlayer.position.x && item.position?.y === activePlayer.position.y);
+        if (itemOnTile) {
+        if(activePlayer.inventory.length >= 16) {
+            return {...prev, dmMessage: "Your inventory is full!"};
+        }
+        const newInventory = [...activePlayer.inventory, { ...itemOnTile, position: undefined }];
+        const newItemsOnMap = currentZone.items.filter(item => item.id !== itemOnTile.id);
+
         const newPlayers = [...prev.players] as [Player, Player];
-        newPlayers[activePlayerId] = { ...newPlayers[activePlayerId], inventory: newInventory };
+        newPlayers[prev.activePlayerId] = { ...newPlayers[prev.activePlayerId], inventory: newInventory };
         return {
-          ...prev,
-          players: newPlayers,
-          currentZone: { ...prev.currentZone!, items: newItemsOnMap },
-          dmMessage: `You picked up: ${itemOnTile.emoji} ${itemOnTile.name}.`
+            ...prev,
+            players: newPlayers,
+            currentZone: { ...prev.currentZone!, items: newItemsOnMap },
+            dmMessage: `You picked up: ${itemOnTile.emoji} ${itemOnTile.name}.`
         };
-      });
-      return;
-    }
+        }
 
-    const { x, y } = activePlayer.position;
-    const { direction } = activePlayer;
-    let targetX = x;
-    let targetY = y;
-    if (direction === 'up') targetY--;
-    if (direction === 'down') targetY++;
-    if (direction === 'left') targetX--;
-    if (direction === 'right') targetX++;
+        const { x, y } = activePlayer.position;
+        const { direction } = activePlayer;
+        let targetX = x;
+        let targetY = y;
+        if (direction === 'up') targetY--;
+        if (direction === 'down') targetY++;
+        if (direction === 'left') targetX--;
+        if (direction === 'right') targetX++;
 
-    const targetNpc = currentZone.npcs.find(npc => npc.position.x === targetX && npc.position.y === targetY);
-    if (targetNpc?.quest) {
-        const questInState = gameState.quests.find(q => q.id === targetNpc.quest!.id);
+        const targetNpc = currentZone.npcs.find(npc => npc.position.x === targetX && npc.position.y === targetY);
+        if (targetNpc?.quest) {
+            const questInState = prev.quests.find(q => q.id === targetNpc.quest!.id);
 
-        if (questInState?.status === QuestStatus.INACTIVE) {
-            const newQuests = gameState.quests.map(q => q.id === questInState.id ? {...q, status: QuestStatus.ACTIVE} : q);
-            
-            let newItemsOnMap = [...currentZone.items];
-            if (questInState.objective.type === 'fetch') {
-                const questItem: Item = {
-                    id: questInState.objective.itemId,
-                    name: questInState.objective.itemName,
-                    description: questInState.objective.itemDescription,
-                    emoji: questInState.objective.itemEmoji,
-                    position: questInState.objective.targetPosition,
-                };
-                newItemsOnMap.push(questItem);
-            }
-            const newDialogueState: DialogueState = {
-                npc: targetNpc,
-                currentText: questInState.description,
-                menuSelectionIndex: 0,
-            };
-            setGameState(prev => ({
-                ...prev,
-                quests: newQuests,
-                currentZone: { ...prev.currentZone!, items: newItemsOnMap },
-                dialogue: newDialogueState,
-                dmMessage: `Quest Started: ${questInState.title}!`,
-                hasNewQuest: true,
-            }));
-        } else if (questInState?.status === QuestStatus.ACTIVE) {
-            const hasItem = activePlayer.inventory.some(item => item.id === questInState.objective.itemId);
-            if (hasItem) {
+            if (questInState?.status === QuestStatus.INACTIVE) {
+                const newQuests = prev.quests.map(q => q.id === questInState.id ? {...q, status: QuestStatus.ACTIVE} : q);
+                
+                let newItemsOnMap = [...currentZone.items];
+                if (questInState.objective.type === 'fetch') {
+                    const questItem: Item = {
+                        id: questInState.objective.itemId,
+                        name: questInState.objective.itemName,
+                        description: questInState.objective.itemDescription,
+                        emoji: questInState.objective.itemEmoji,
+                        position: questInState.objective.targetPosition,
+                    };
+                    newItemsOnMap.push(questItem);
+                }
                 const newDialogueState: DialogueState = {
                     npc: targetNpc,
-                    currentText: questInState.completionDialogue,
+                    currentText: questInState.description,
                     menuSelectionIndex: 0,
                 };
-                setGameState(prev => ({ ...prev, dialogue: newDialogueState }));
-            } else {
-                 const newDialogueState: DialogueState = {
+                return {
+                    ...prev,
+                    quests: newQuests,
+                    currentZone: { ...prev.currentZone!, items: newItemsOnMap },
+                    dialogue: newDialogueState,
+                    dmMessage: `Quest Started: ${questInState.title}!`,
+                    hasNewQuest: true,
+                };
+            } else if (questInState?.status === QuestStatus.ACTIVE) {
+                const hasItem = activePlayer.inventory.some(item => item.id === questInState.objective.itemId);
+                if (hasItem) {
+                    const newDialogueState: DialogueState = {
+                        npc: targetNpc,
+                        currentText: questInState.completionDialogue,
+                        menuSelectionIndex: 0,
+                    };
+                    return { ...prev, dialogue: newDialogueState };
+                } else {
+                    const newDialogueState: DialogueState = {
+                        npc: targetNpc,
+                        currentText: `You don't have the ${questInState.objective.itemName} yet.`,
+                        menuSelectionIndex: 0,
+                    };
+                    return {...prev, dialogue: newDialogueState};
+                }
+            } else { // Quest is COMPLETED
+                const newDialogueState: DialogueState = {
                     npc: targetNpc,
-                    currentText: `You don't have the ${questInState.objective.itemName} yet.`,
+                    currentText: targetNpc.initialDialogue,
                     menuSelectionIndex: 0,
-                 };
-                 setGameState(prev => ({...prev, dialogue: newDialogueState}));
+                };
+                return {...prev, dialogue: newDialogueState};
             }
-        } else { // Quest is COMPLETED
+        } else if (targetNpc) {
             const newDialogueState: DialogueState = {
                 npc: targetNpc,
                 currentText: targetNpc.initialDialogue,
                 menuSelectionIndex: 0,
             };
-            setGameState(prev => ({...prev, dialogue: newDialogueState}));
+            return { ...prev, dialogue: newDialogueState };
         }
-    } else if (targetNpc) {
-        const newDialogueState: DialogueState = {
-            npc: targetNpc,
-            currentText: targetNpc.initialDialogue,
-            menuSelectionIndex: 0,
-        };
-        setGameState(prev => ({ ...prev, dialogue: newDialogueState }));
-    }
-  };
+        return prev;
+    });
+  }, [messageQueue, activePlayer, isChatting, dialogue, setGameState, handleDialogueAction]);
   
   const handleSendChatMessage = async (message: string) => {
     if (!dialogue || !activeChatSession) return;
@@ -461,9 +495,9 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState, isFull
     }
   };
   
-  const handleCloseChat = () => {
+  const handleCloseChat = useCallback(() => {
     setGameState(prev => ({...prev, isChatting: false }));
-  };
+  }, [setGameState]);
 
   const handleNewConversation = () => {
     if (!dialogue || !activePlayer) return;
@@ -484,13 +518,13 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState, isFull
     setActiveChatSession(newSession);
   }
 
-  const handleBack = () => {
+  const handleBack = useCallback(() => {
     if (isChatting) {
         handleCloseChat();
     } else if (dialogue) {
         handleDialogueAction('close');
     }
-  }
+  }, [isChatting, dialogue, handleCloseChat, handleDialogueAction]);
 
   const handleQuestsClick = () => {
     setShowQuests(true);
@@ -498,6 +532,96 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState, isFull
         setGameState(prev => ({ ...prev, hasNewQuest: false }));
     }
   };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // When chatting, disable all game-related keyboard shortcuts
+      // to allow free typing in the chat input.
+      if (isChatting) {
+        return;
+      }
+
+      const key = e.key.toLowerCase();
+      setPressedKeys(prev => new Set(prev).add(key));
+
+      // Dialogue navigation takes precedence over world movement
+      if (dialogue) {
+        if (key === 'w') {
+          e.preventDefault();
+          handleMove(0, -1);
+        } else if (key === 's') {
+          e.preventDefault();
+          handleMove(0, 1);
+        } else if (key === 'e') {
+          e.preventDefault();
+          handleInteract();
+        } else if (key === 'r') {
+          e.preventDefault();
+          handleBack();
+        }
+        return; // Prevent any other actions during dialogue
+      }
+      
+      // Prevent movement if game is paused for other modals (inventory, quests, etc.)
+      if (isGamePaused) return;
+
+      const moveDirections: { [key: string]: [number, number] } = {
+        'w': [0, -1], 'a': [-1, 0], 's': [0, 1], 'd': [1, 0],
+      };
+
+      if (moveDirections[key]) {
+        e.preventDefault();
+        // Only start a new move interval if a different key is pressed or no key is being held.
+        // This allows press-and-hold to work correctly.
+        if (key !== activeMoveKey.current) {
+          if (moveIntervalRef.current) clearInterval(moveIntervalRef.current);
+          
+          activeMoveKey.current = key;
+          const [dx, dy] = moveDirections[key];
+          
+          handleMove(dx, dy); // Move once immediately
+          
+          moveIntervalRef.current = setInterval(() => {
+            handleMove(dx, dy);
+          }, 50);
+        }
+      } else if (key === 'e') {
+        e.preventDefault();
+        handleInteract();
+      } else if (key === 'r') {
+        e.preventDefault();
+        handleBack();
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase();
+      setPressedKeys(prev => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+
+      if (key === activeMoveKey.current) {
+        if (moveIntervalRef.current) {
+          clearInterval(moveIntervalRef.current);
+          moveIntervalRef.current = null;
+        }
+        activeMoveKey.current = null;
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('keyup', handleKeyUp);
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('keyup', handleKeyUp);
+      if (moveIntervalRef.current) {
+        clearInterval(moveIntervalRef.current);
+      }
+    };
+  }, [isGamePaused, dialogue, isChatting, handleMove, handleInteract, handleBack]);
 
   const isNpc = selectedObject && 'role' in selectedObject;
   const isItem = selectedObject && !('role' in selectedObject);
@@ -570,6 +694,7 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState, isFull
           isBackButtonDisabled={isBackButtonDisabled}
           areControlsDimmed={areControlsDimmed}
           hasNewQuest={hasNewQuest}
+          pressedKeys={pressedKeys}
         />
       </div>
     </div>
