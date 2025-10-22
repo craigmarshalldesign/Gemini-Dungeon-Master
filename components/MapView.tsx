@@ -6,6 +6,7 @@ interface MapViewProps {
   players: [Player, Player];
   activePlayerId: number;
   onSelectObject: (obj: Item | NPC) => void;
+  entryPosition: { x: number; y: number } | null;
   exitPosition: { x: number; y: number } | null;
 }
 
@@ -15,6 +16,7 @@ const TILE_COLORS: { [key: string]: string } = {
   water: 'bg-blue-700',
   path: 'bg-yellow-900',
   building: 'bg-gray-600',
+  entry: 'bg-blue-400 animate-pulse',
   exit: 'bg-yellow-400 animate-pulse',
   default: 'bg-black',
 };
@@ -26,7 +28,7 @@ const directionToRotation: Record<Direction, string> = {
     right: 'rotate-0',
 };
 
-const MapView: React.FC<MapViewProps> = ({ zone, players, activePlayerId, onSelectObject, exitPosition }) => {
+const MapView: React.FC<MapViewProps> = ({ zone, players, activePlayerId, onSelectObject, entryPosition, exitPosition }) => {
   const mapSize = 20;
   
   const renderTile = (tile: string, x: number, y: number) => {
@@ -34,8 +36,12 @@ const MapView: React.FC<MapViewProps> = ({ zone, players, activePlayerId, onSele
     const npcOnTile = zone.npcs.find(n => n.position.x === x && n.position.y === y);
     const itemOnTile = zone.items.find(i => i.position?.x === x && i.position.y === y);
 
+    const isEntryTile = entryPosition && x === entryPosition.x && y === entryPosition.y;
     const isExitTile = exitPosition && x === exitPosition.x && y === exitPosition.y;
-    const finalTile = isExitTile ? 'exit' : tile;
+    
+    let finalTile = tile;
+    if (isEntryTile) finalTile = 'entry';
+    if (isExitTile) finalTile = 'exit';
     
     const color = TILE_COLORS[finalTile] || TILE_COLORS.default;
 

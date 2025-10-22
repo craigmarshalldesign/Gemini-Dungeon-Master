@@ -8,7 +8,7 @@ interface TestWorldData {
   zoneName: string;
   tileMap: ZoneMap;
   npcs: NPC[];
-  exitPosition: { x: number, y: number };
+  exitPosition: { x: number, y: number } | null;
   playerSpawnPoints: [{ x: number, y: number }, { x: number, y: number }];
 }
 

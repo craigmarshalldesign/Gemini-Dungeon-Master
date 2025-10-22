@@ -1,4 +1,3 @@
-
 import React from 'react';
 
 interface ControlsProps {
@@ -120,7 +119,7 @@ const Controls: React.FC<ControlsProps> = ({
     hasNewQuest,
     pressedKeys,
 }) => {
-  const moveIntervalRef = React.useRef<NodeJS.Timeout | null>(null);
+  const moveIntervalRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
 
   React.useEffect(() => {
     // Cleanup interval on component unmount

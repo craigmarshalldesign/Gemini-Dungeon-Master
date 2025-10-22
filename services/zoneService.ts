@@ -10,8 +10,9 @@ interface ZoneLayoutResponse {
 
 interface ZonePopulationResponse {
     npcs: NPC[];
-    exitPosition: { x: number, y: number };
-    playerSpawnPoints: [{x: number, y: number}, {x: number, y: number}];
+    exitPosition: { x: number, y: number } | null;
+    entryPosition: { x: number, y: number } | null;
+    initialSpawnPoints?: [{x: number, y: number}, {x: number, y: number}];
 }
 
 /**
@@ -28,14 +29,13 @@ function extractJson(text: string): string {
     throw new Error("No valid JSON object found in the AI response.");
 }
 
-export async function generateZoneLayout(zoneDescription: string): Promise<ZoneLayoutResponse> {
+export async function generateZoneLayout(zoneName: string, zoneTerrain: string): Promise<ZoneLayoutResponse> {
     const prompt = `You are a map designer for a D&D style game.
-    Generate a 20x20 tile-based map for a zone described as: '${zoneDescription}'. 
-    The zone also needs a short, evocative name (e.g., 'Whispering Glade', 'Grumble-Belly Mine').
+    Generate a 20x20 tile-based map for a zone named '${zoneName}' which is a ${zoneTerrain} area.
     The aesthetic is like Legend of Zelda on the Gameboy. The map should be a 2D array of strings.
     Valid tile types are: 'grass', 'tree', 'water', 'path', 'building'.
-    IMPORTANT: Ensure the map has large, interconnected walkable areas ('grass', 'path') and avoid creating small, isolated pockets or long, narrow corridors that can be easily blocked.
-    Return a valid JSON object.`;
+    IMPORTANT: Ensure the map has large, interconnected walkable areas ('grass', 'path') and avoid creating small, isolated pockets.
+    Return a valid JSON object with keys 'zoneName' (use the one provided) and 'tileMap'.`;
 
     const response = await generateWithRetry({
         model: 'gemini-2.5-flash',
@@ -111,15 +111,30 @@ const findLargestConnectedComponent = (tileMap: ZoneMap): {x: number, y: number}
     return largestComponent;
 };
 
-export async function populateZone(worldName: string, mainStoryline: string, tileMap: ZoneMap): Promise<ZonePopulationResponse> {
+export async function populateZone(
+    worldName: string, 
+    mainStoryline: string, 
+    tileMap: ZoneMap,
+    isStartingZone: boolean,
+    previousZoneDescription: string | null,
+    hasNextZone: boolean
+): Promise<ZonePopulationResponse> {
+    
+    let contextPrompt = '';
+    if (isStartingZone) {
+        contextPrompt = 'This is the very first zone of the adventure. Create an introductory quest for one of the NPCs.';
+    } else {
+        contextPrompt = `The players have just arrived from a zone described as '${previousZoneDescription}'. Create a quest that logically follows their journey.`;
+    }
+    
     const prompt = `You are a Dungeon Master for a world named '${worldName}'. The main story is: '${mainStoryline}'.
     You are given this 20x20 zone map: ${JSON.stringify(tileMap)}.
     Your task is to populate this map.
-    1.  Place 2-3 interesting and unique NPCs on the map. Their names, roles, and personalities should fit the world.
+    ${contextPrompt}
+    1.  Place 2-3 interesting NPCs. Their names, roles, and personalities should fit the world.
     2.  For each NPC, provide: 'name', 'role', 'description', 'personality', 'initialDialogue', basic 'stats' ({hp, str, int}), their 'position' {x, y}, and a 'quest' (which can be null).
-    3.  For ONE of the NPCs, create a simple 'fetch' quest. The quest object must be fully formed.
-    4.  Determine a suitable 'exitPosition' {x, y} for the player to leave the zone.
-    IMPORTANT: All positions (NPCs, quest items, exit) MUST be on walkable tiles ('grass' or 'path'). Do not place anything on 'tree', 'water', or 'building' tiles. Place them in open areas where they won't block paths.
+    3.  For ONE of the NPCs, create a simple 'fetch' quest.
+    IMPORTANT: All positions (NPCs, quest items, entry/exit) MUST be on walkable tiles ('grass' or 'path') and placed in open areas.
     Return a valid JSON object.`;
 
     const response = await generateWithRetry({
@@ -182,41 +197,48 @@ export async function populateZone(worldName: string, mainStoryline: string, til
                             },
                             required: ['name', 'role', 'description', 'personality', 'initialDialogue', 'stats', 'position', 'quest']
                         }
-                    },
-                    exitPosition: {
-                         type: Type.OBJECT,
-                         properties: { x: { type: Type.NUMBER }, y: { type: Type.NUMBER } },
-                         required: ['x', 'y']
                     }
                 },
-                required: ['npcs', 'exitPosition']
+                required: ['npcs']
             }
         }
     });
 
     try {
         const jsonText = extractJson(response.text);
-        const responseData = JSON.parse(jsonText) as Omit<ZonePopulationResponse, 'playerSpawnPoints'>;
+        const responseData = JSON.parse(jsonText);
         
         const walkableTiles = findLargestConnectedComponent(tileMap);
-        if (walkableTiles.length < 20) { // Ensure there's a reasonably sized playable area
+        if (walkableTiles.length < 20) {
              throw new Error("AI generated a map with too few connected walkable tiles.");
         }
         
         const walkableSet = new Set(walkableTiles.map(t => `${t.x},${t.y}`));
         const occupiedCoordinates = new Set<string>();
 
-        const findNewValidPosition = () => {
-            const shuffledWalkable = [...walkableTiles].sort(() => 0.5 - Math.random());
+        const findNewValidPosition = (preferredSide?: 'left' | 'right') => {
+            let filteredTiles = walkableTiles;
+            if (preferredSide === 'left') {
+                filteredTiles = walkableTiles.filter(t => t.x < 5);
+            } else if (preferredSide === 'right') {
+                filteredTiles = walkableTiles.filter(t => t.x > 14);
+            }
+            const shuffledWalkable = [...filteredTiles].sort(() => 0.5 - Math.random());
             for (const tile of shuffledWalkable) {
                 if (!occupiedCoordinates.has(`${tile.x},${tile.y}`)) {
+                    return tile;
+                }
+            }
+            // Fallback if preferred side is full
+            for (const tile of walkableTiles.sort(() => 0.5 - Math.random())) {
+                 if (!occupiedCoordinates.has(`${tile.x},${tile.y}`)) {
                     return tile;
                 }
             }
             throw new Error("Could not find any valid unoccupied spawn points on the map.");
         };
         
-        const validatedNpcs = responseData.npcs.map(npc => {
+        const validatedNpcs = responseData.npcs.map((npc: NPC) => {
             const { x, y } = npc.position;
             const newNpc = { ...npc };
             if (!walkableSet.has(`${x},${y}`) || occupiedCoordinates.has(`${x},${y}`)) {
@@ -235,43 +257,26 @@ export async function populateZone(worldName: string, mainStoryline: string, til
             return newNpc;
         });
         
-        let validatedExitPosition = responseData.exitPosition;
-        const { x, y } = validatedExitPosition;
-        if (!walkableSet.has(`${x},${y}`) || occupiedCoordinates.has(`${x},${y}`)) {
-             validatedExitPosition = findNewValidPosition();
-        }
-        occupiedCoordinates.add(`${validatedExitPosition.x},${validatedExitPosition.y}`);
+        let entryPosition = isStartingZone ? null : findNewValidPosition('left');
+        if (entryPosition) occupiedCoordinates.add(`${entryPosition.x},${entryPosition.y}`);
+
+        let exitPosition = hasNextZone ? findNewValidPosition('right') : null;
+        if (exitPosition) occupiedCoordinates.add(`${exitPosition.x},${exitPosition.y}`);
         
-        const findPlayerSpawnPoints = (): [{x: number, y: number}, {x: number, y: number}] => {
-            const shuffledWalkable = [...walkableTiles].sort(() => 0.5 - Math.random());
-            for (const tile of shuffledWalkable) {
-                if (occupiedCoordinates.has(`${tile.x},${tile.y}`)) continue;
-
-                const neighbors = [
-                    { x: tile.x + 1, y: tile.y }, { x: tile.x - 1, y: tile.y },
-                    { x: tile.x, y: tile.y + 1 }, { x: tile.x, y: tile.y - 1 },
-                ].sort(() => 0.5 - Math.random());
-
-                for (const neighbor of neighbors) {
-                    if (walkableSet.has(`${neighbor.x},${neighbor.y}`) && !occupiedCoordinates.has(`${neighbor.x},${neighbor.y}`)) {
-                        return [tile, neighbor];
-                    }
-                }
-            }
-            // Fallback for extremely dense maps
+        let result: ZonePopulationResponse = { 
+            npcs: validatedNpcs, 
+            exitPosition,
+            entryPosition
+        };
+        
+        if (isStartingZone) {
             const point1 = findNewValidPosition();
             occupiedCoordinates.add(`${point1.x},${point1.y}`);
             const point2 = findNewValidPosition();
-            return [point1, point2];
-        };
+            result.initialSpawnPoints = [point1, point2];
+        }
 
-        const playerSpawnPoints = findPlayerSpawnPoints();
-        
-        return { 
-            npcs: validatedNpcs, 
-            exitPosition: validatedExitPosition,
-            playerSpawnPoints
-        };
+        return result;
 
     } catch (e) {
         console.error("Failed to parse or validate Gemini response for zone population:", response.text, e);

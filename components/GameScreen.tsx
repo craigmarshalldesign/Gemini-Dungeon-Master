@@ -1,7 +1,5 @@
-
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import type { GameState, Player, Direction, NPC, Item, Quest, DialogueState } from '../types';
+import type { GameState, Player, Direction, NPC, Item, Quest, DialogueState, Zone } from '../types';
 import { QuestStatus, ClassType } from '../types';
 import MapView from './MapView';
 import Controls from './Controls';
@@ -20,10 +18,12 @@ import type { Chat } from '@google/genai';
 
 interface GameScreenProps {
   gameState: GameState;
+  currentZone: Zone;
   setGameState: React.Dispatch<React.SetStateAction<GameState>>;
   isFullscreen: boolean;
   toggleFullscreen: () => void;
   endGame: () => void;
+  onZoneTransition: (targetCoords: { x: number; y: number }, cameFromCoords: { x: number; y: number }) => void;
 }
 
 const levelUp = (player: Player): Player => {
@@ -54,7 +54,7 @@ const levelUp = (player: Player): Player => {
   };
 }
 
-const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState, isFullscreen, toggleFullscreen, endGame }) => {
+const GameScreen: React.FC<GameScreenProps> = ({ gameState, currentZone, setGameState, isFullscreen, toggleFullscreen, endGame, onZoneTransition }) => {
   const [showCharSheet, setShowCharSheet] = useState<Player | null>(null);
   const [selectedObject, setSelectedObject] = useState<NPC | Item | null>(null);
   const [showInventory, setShowInventory] = useState(false);
@@ -66,22 +66,29 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState, isFull
   
   const [activeChatSession, setActiveChatSession] = useState<Chat | null>(null);
   const lastMoveTimestamp = useRef(0);
-  const moveIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const moveIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const activeMoveKey = useRef<string | null>(null);
   
-  const { players, currentZone, activePlayerId, quests, mainStoryline, worldName, dialogue, isChatting, chatStates, messageQueue, hasNewQuest } = gameState;
+  const { players, activePlayerId, quests, mainStoryline, worldName, dialogue, isChatting, chatStates, messageQueue, hasNewQuest, currentZoneCoords, zonePath } = gameState;
   const activePlayer = players[activePlayerId];
 
-  const isGamePaused = !!dialogue || isChatting || !!showCharSheet || !!selectedObject || showInventory || showAbilities || showQuests || showSettings;
+  const isGamePaused = !!dialogue || isChatting || !!showCharSheet || !!selectedObject || showInventory || showAbilities || showQuests || showSettings || gameState.isLoading;
 
   useEffect(() => {
-    const allQuestsCompleted = quests.length > 0 && quests.every(q => q.status === QuestStatus.COMPLETED);
+    // Check if all quests *for the current zone* are complete.
+    const questsForThisZone = quests.filter(q => {
+        // A quest belongs to this zone if the NPC who gives it is in this zone.
+        const questGiver = currentZone.npcs.find(npc => npc.quest?.id === q.id);
+        return !!questGiver;
+    });
 
-    if (allQuestsCompleted && !zoneCompleted) { 
+    const allCurrentQuestsCompleted = questsForThisZone.length > 0 && questsForThisZone.every(q => q.status === QuestStatus.COMPLETED);
+
+    if (allCurrentQuestsCompleted && !zoneCompleted) { 
       setZoneCompleted(true);
       setGameState(prev => ({...prev, messageQueue: ["You've completed all local quests! A path to a new area has opened."], dmMessage: "You've completed all local quests! A path to a new area has opened."}));
     }
-  }, [quests, setGameState, zoneCompleted]);
+  }, [quests, currentZone.npcs, setGameState, zoneCompleted]);
   
   useEffect(() => {
     if (isGamePaused) {
@@ -90,10 +97,12 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState, isFull
 
     const moveInterval = setInterval(() => {
         setGameState(prev => {
-            if (!prev.currentZone) return prev;
-            
             const allPlayerPositions = new Set(prev.players.map(p => p ? `${p.position.x},${p.position.y}` : ''));
-            const nextNpcs = [...prev.currentZone.npcs];
+            const key = `${prev.currentZoneCoords!.x},${prev.currentZoneCoords!.y}`;
+            const zoneToUpdate = prev.generatedZones[key];
+            if (!zoneToUpdate) return prev;
+
+            const nextNpcs = [...zoneToUpdate.npcs];
             const nextNpcPositions = new Set(nextNpcs.map(n => `${n.position.x},${n.position.y}`));
 
             for (let i = 0; i < nextNpcs.length; i++) {
@@ -106,10 +115,9 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState, isFull
                     const newY = npc.position.y + dy;
                     
                     const isTraversable = 
-                        newX >= 0 && newX < prev.currentZone.tileMap[0].length &&
-                        newY >= 0 && newY < prev.currentZone.tileMap.length &&
-                        // FIX: Corrected typo `currentZon!e` to `currentZone!`.
-                        ['grass', 'path'].includes(prev.currentZone!.tileMap[newY][newX]);
+                        newX >= 0 && newX < zoneToUpdate.tileMap[0].length &&
+                        newY >= 0 && newY < zoneToUpdate.tileMap.length &&
+                        ['grass', 'path'].includes(zoneToUpdate.tileMap[newY][newX]);
                     
                     const targetKey = `${newX},${newY}`;
                     const isOccupiedByPlayer = allPlayerPositions.has(targetKey);
@@ -123,12 +131,12 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState, isFull
                     }
                 }
             }
-
+            
             return {
                 ...prev,
-                currentZone: {
-                    ...prev.currentZone,
-                    npcs: nextNpcs,
+                generatedZones: {
+                    ...prev.generatedZones,
+                    [key]: { ...zoneToUpdate, npcs: nextNpcs }
                 }
             };
         });
@@ -138,8 +146,6 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState, isFull
     return () => clearInterval(moveInterval);
   }, [isGamePaused, setGameState]);
 
-  // This effect ensures that if a modal or dialogue opens while a movement key is held down,
-  // the character stops moving, preventing "runaway" character issues.
   useEffect(() => {
     if (isGamePaused) {
         if (moveIntervalRef.current) {
@@ -150,8 +156,7 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState, isFull
     }
   }, [isGamePaused]);
 
-
-  if (!currentZone || !players[0] || !players[1]) {
+  if (!players[0] || !players[1] || !currentZoneCoords) {
     return <div>Loading game...</div>;
   }
   
@@ -164,11 +169,11 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState, isFull
     lastMoveTimestamp.current = now;
 
     setGameState(prev => {
-        const { players, activePlayerId, isChatting, messageQueue, dialogue, currentZone } = prev;
+        const { players, activePlayerId, isChatting, messageQueue, dialogue, currentZoneCoords, zonePath } = prev;
         
         const activePlayer = players[activePlayerId];
         
-        if (!activePlayer || isChatting || (messageQueue && messageQueue.length > 0)) {
+        if (!activePlayer || isChatting || (messageQueue && messageQueue.length > 0) || !currentZoneCoords) {
             return prev;
         }
 
@@ -183,8 +188,6 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState, isFull
             return { ...prev, dialogue: { ...dialogue, menuSelectionIndex: newIndex } };
         }
 
-        if (!currentZone) return prev;
-
         let newDirection: Direction = activePlayer.direction;
         if (dy === -1) newDirection = 'up';
         else if (dy === 1) newDirection = 'down';
@@ -196,9 +199,26 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState, isFull
         
         const otherPlayer = players[(activePlayerId + 1) % 2]!;
         
-        const exitPosition = currentZone.exitPosition;
+        // Check for zone transition
+        const { entryPosition, exitPosition } = currentZone;
+        const currentPathIndex = zonePath.findIndex(p => p.x === currentZoneCoords.x && p.y === currentZoneCoords.y);
+
         if (zoneCompleted && exitPosition && newX === exitPosition.x && newY === exitPosition.y) {
-           return {...prev, dialogue: null, dmMessage: "You've found the exit! For now, your journey in this area is complete. (More zones coming soon!)"};
+            if (currentPathIndex < zonePath.length - 1) {
+                const nextZoneCoords = zonePath[currentPathIndex + 1];
+                onZoneTransition(nextZoneCoords, currentZoneCoords);
+                return prev; // Stop further processing, let transition handler take over
+            } else {
+                 return {...prev, dialogue: null, dmMessage: "You've reached the final area! The adventure concludes for now."};
+            }
+        }
+        
+        if (entryPosition && newX === entryPosition.x && newY === entryPosition.y) {
+            if (currentPathIndex > 0) {
+                const prevZoneCoords = zonePath[currentPathIndex - 1];
+                onZoneTransition(prevZoneCoords, currentZoneCoords);
+                return prev; // Stop further processing
+            }
         }
 
         const isTraversable = 
@@ -223,7 +243,7 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState, isFull
             return { ...prev, players: newPlayers };
         }
     });
-  }, [setGameState, zoneCompleted]);
+  }, [setGameState, zoneCompleted, currentZone, onZoneTransition]);
 
   const switchPlayer = () => {
     if (dialogue || isChatting || (messageQueue && messageQueue.length > 0)) return;
@@ -339,26 +359,32 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState, isFull
     }
     
     setGameState(prev => {
+        if (!currentZoneCoords) return prev;
+        const key = `${currentZoneCoords.x},${currentZoneCoords.y}`;
+        const zoneToUpdate = prev.generatedZones[key];
+
         const activePlayer = prev.players[prev.activePlayerId];
-        const currentZone = prev.currentZone;
-        if (!activePlayer || !currentZone) return prev;
+        if (!activePlayer || !zoneToUpdate) return prev;
 
-        const itemOnTile = currentZone.items.find(item => item.position?.x === activePlayer.position.x && item.position?.y === activePlayer.position.y);
+        const itemOnTile = zoneToUpdate.items.find(item => item.position?.x === activePlayer.position.x && item.position?.y === activePlayer.position.y);
         if (itemOnTile) {
-        if(activePlayer.inventory.length >= 16) {
-            return {...prev, dmMessage: "Your inventory is full!"};
-        }
-        const newInventory = [...activePlayer.inventory, { ...itemOnTile, position: undefined }];
-        const newItemsOnMap = currentZone.items.filter(item => item.id !== itemOnTile.id);
+            if(activePlayer.inventory.length >= 16) {
+                return {...prev, dmMessage: "Your inventory is full!"};
+            }
+            const newInventory = [...activePlayer.inventory, { ...itemOnTile, position: undefined }];
+            const newItemsOnMap = zoneToUpdate.items.filter(item => item.id !== itemOnTile.id);
 
-        const newPlayers = [...prev.players] as [Player, Player];
-        newPlayers[prev.activePlayerId] = { ...newPlayers[prev.activePlayerId], inventory: newInventory };
-        return {
-            ...prev,
-            players: newPlayers,
-            currentZone: { ...prev.currentZone!, items: newItemsOnMap },
-            dmMessage: `You picked up: ${itemOnTile.emoji} ${itemOnTile.name}.`
-        };
+            const newPlayers = [...prev.players] as [Player, Player];
+            newPlayers[prev.activePlayerId] = { ...newPlayers[prev.activePlayerId], inventory: newInventory };
+            
+            const newGeneratedZones = { ...prev.generatedZones, [key]: { ...zoneToUpdate, items: newItemsOnMap } };
+
+            return {
+                ...prev,
+                players: newPlayers,
+                generatedZones: newGeneratedZones,
+                dmMessage: `You picked up: ${itemOnTile.emoji} ${itemOnTile.name}.`
+            };
         }
 
         const { x, y } = activePlayer.position;
@@ -370,14 +396,14 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState, isFull
         if (direction === 'left') targetX--;
         if (direction === 'right') targetX++;
 
-        const targetNpc = currentZone.npcs.find(npc => npc.position.x === targetX && npc.position.y === targetY);
+        const targetNpc = zoneToUpdate.npcs.find(npc => npc.position.x === targetX && npc.position.y === targetY);
         if (targetNpc?.quest) {
             const questInState = prev.quests.find(q => q.id === targetNpc.quest!.id);
 
             if (questInState?.status === QuestStatus.INACTIVE) {
                 const newQuests = prev.quests.map(q => q.id === questInState.id ? {...q, status: QuestStatus.ACTIVE} : q);
                 
-                let newItemsOnMap = [...currentZone.items];
+                let newItemsOnMap = [...zoneToUpdate.items];
                 if (questInState.objective.type === 'fetch') {
                     const questItem: Item = {
                         id: questInState.objective.itemId,
@@ -393,10 +419,13 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState, isFull
                     currentText: questInState.description,
                     menuSelectionIndex: 0,
                 };
+                
+                const newGeneratedZones = { ...prev.generatedZones, [key]: { ...zoneToUpdate, items: newItemsOnMap } };
+                
                 return {
                     ...prev,
                     quests: newQuests,
-                    currentZone: { ...prev.currentZone!, items: newItemsOnMap },
+                    generatedZones: newGeneratedZones,
                     dialogue: newDialogueState,
                     dmMessage: `Quest Started: ${questInState.title}!`,
                     hasNewQuest: true,
@@ -436,7 +465,7 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState, isFull
         }
         return prev;
     });
-  }, [messageQueue, activePlayer, isChatting, dialogue, setGameState, handleDialogueAction]);
+  }, [messageQueue, activePlayer, isChatting, dialogue, setGameState, handleDialogueAction, currentZoneCoords]);
   
   const handleSendChatMessage = async (message: string) => {
     if (!dialogue || !activeChatSession) return;
@@ -448,7 +477,6 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState, isFull
     setGameState(prev => ({ ...prev, isLoading: true }));
     const playerMessage = { author: 'player' as const, text: message };
     
-    // Optimistically add player message for immediate UI feedback
     setGameState(prev => ({
         ...prev,
         chatStates: {
@@ -465,7 +493,6 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState, isFull
         const npcResponseText = response.text.trim();
         const npcMessage = { author: 'npc' as const, text: npcResponseText };
 
-        // Update state with NPC response and increment message count
         setGameState(prev => ({
             ...prev,
             chatStates: {
@@ -535,8 +562,6 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState, isFull
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // When chatting, disable all game-related keyboard shortcuts
-      // to allow free typing in the chat input.
       if (isChatting) {
         return;
       }
@@ -544,7 +569,6 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState, isFull
       const key = e.key.toLowerCase();
       setPressedKeys(prev => new Set(prev).add(key));
 
-      // Dialogue navigation takes precedence over world movement
       if (dialogue) {
         if (key === 'w') {
           e.preventDefault();
@@ -559,10 +583,9 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState, isFull
           e.preventDefault();
           handleBack();
         }
-        return; // Prevent any other actions during dialogue
+        return;
       }
       
-      // Prevent movement if game is paused for other modals (inventory, quests, etc.)
       if (isGamePaused) return;
 
       const moveDirections: { [key: string]: [number, number] } = {
@@ -571,15 +594,13 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState, isFull
 
       if (moveDirections[key]) {
         e.preventDefault();
-        // Only start a new move interval if a different key is pressed or no key is being held.
-        // This allows press-and-hold to work correctly.
         if (key !== activeMoveKey.current) {
           if (moveIntervalRef.current) clearInterval(moveIntervalRef.current);
           
           activeMoveKey.current = key;
           const [dx, dy] = moveDirections[key];
           
-          handleMove(dx, dy); // Move once immediately
+          handleMove(dx, dy);
           
           moveIntervalRef.current = setInterval(() => {
             handleMove(dx, dy);
@@ -611,12 +632,12 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState, isFull
       }
     };
 
-    document.addEventListener('keydown', handleKeyDown);
-    document.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
 
     return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-      document.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
       if (moveIntervalRef.current) {
         clearInterval(moveIntervalRef.current);
       }
@@ -628,11 +649,11 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState, isFull
   const currentNpcChatState = (dialogue && chatStates[dialogue.npc.name]) || { history: [], messagesSent: 0 };
   
   const hasActiveMessageQueue = !!messageQueue && messageQueue.length > 0;
-  const isDPadDisabled = isChatting || hasActiveMessageQueue;
-  const arePanelButtonsDisabled = isChatting || hasActiveMessageQueue || !!dialogue;
-  const isSwitchPlayerDisabled = isChatting || hasActiveMessageQueue || !!dialogue;
+  const isDPadDisabled = isChatting || hasActiveMessageQueue || gameState.isLoading;
+  const arePanelButtonsDisabled = isChatting || hasActiveMessageQueue || !!dialogue || gameState.isLoading;
+  const isSwitchPlayerDisabled = isChatting || hasActiveMessageQueue || !!dialogue || gameState.isLoading;
   const isBackButtonDisabled = isChatting;
-  const areControlsDimmed = isChatting;
+  const areControlsDimmed = isChatting || gameState.isLoading;
 
   return (
     <div className="flex flex-col h-full w-full">
@@ -663,11 +684,11 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState, isFull
       )}
       
       <div className="flex-shrink-0 flex justify-around items-center mb-2">
-          <button disabled={areControlsDimmed} onClick={() => setShowCharSheet(players[0])} className={`px-2 py-1 text-[10px] bg-green-700 rounded ${activePlayerId === 0 ? 'ring-2 ring-white' : ''} disabled:opacity-50`}>{players[0].name} Lvl {players[0].stats.level}</button>
+          <button disabled={areControlsDimmed} onClick={() => setShowCharSheet(players[0])} className={`px-2 py-1 text-[10px] bg-green-700 rounded ${activePlayerId === 0 ? 'ring-2 ring-white' : ''} disabled:opacity-50`}>{players[0]!.name} Lvl {players[0]!.stats.level}</button>
           <button onClick={switchPlayer} disabled={isSwitchPlayerDisabled} className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-500 border-b-2 border-blue-800 active:border-b-0 disabled:opacity-50 text-base">
               🔄
           </button>
-          <button disabled={areControlsDimmed} onClick={() => setShowCharSheet(players[1])} className={`px-2 py-1 text-[10px] bg-purple-700 rounded ${activePlayerId === 1 ? 'ring-2 ring-white' : ''} disabled:opacity-50`}>{players[1].name} Lvl {players[1].stats.level}</button>
+          <button disabled={areControlsDimmed} onClick={() => setShowCharSheet(players[1])} className={`px-2 py-1 text-[10px] bg-purple-700 rounded ${activePlayerId === 1 ? 'ring-2 ring-white' : ''} disabled:opacity-50`}>{players[1]!.name} Lvl {players[1]!.stats.level}</button>
       </div>
       
       <div className="flex-grow flex items-center justify-center overflow-hidden relative">
@@ -677,6 +698,7 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState, isFull
             activePlayerId={activePlayerId}
             onSelectObject={setSelectedObject}
             exitPosition={zoneCompleted ? currentZone.exitPosition : null}
+            entryPosition={currentZone.entryPosition}
         />
       </div>
 

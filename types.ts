@@ -71,12 +71,14 @@ export interface Player {
   inventory: Item[];
 }
 
-export interface Tile {
-  terrain: string;
+export interface WorldMapZone {
   name: string;
+  terrain: string; // e.g., 'forest', 'plains'
+  x: number;
+  y: number;
 }
 
-export type WorldMap = Tile[][];
+export type WorldMap = WorldMapZone[][];
 
 export enum QuestStatus {
   INACTIVE = 'inactive',
@@ -126,7 +128,12 @@ export interface Zone {
   tileMap: ZoneMap;
   npcs: NPC[];
   items: Item[];
-  exitPosition: { x: number; y: number };
+  // Portal to the next zone in the path
+  exitPosition: { x: number; y: number } | null;
+  // Portal to the previous zone in the path
+  entryPosition: { x: number; y: number } | null;
+  // Only for the very first zone
+  initialSpawnPoints?: [{ x: number; y: number }, { x: number; y: number }];
 }
 
 export interface DialogueState {
@@ -151,8 +158,14 @@ export interface GameState {
   mainStoryline: string;
   dmMessage: string;
   players: [Player | null, Player | null];
-  playerSpawnPoints: [{ x: number; y: number }, { x: number; y: number }] | null;
-  currentZone: Zone | null;
+  
+  // World and Zone progression state
+  worldMap: WorldMap | null;
+  zonePath: { x: number; y: number }[];
+  finalBossZoneCoords: { x: number; y: number } | null;
+  generatedZones: Record<string, Zone>; // Key: "x,y", Value: Zone object
+  currentZoneCoords: { x: number; y: number } | null;
+
   dialogue: DialogueState | null;
   isChatting: boolean;
   chatStates: Record<string, NPCChatState>; // Key is NPC name

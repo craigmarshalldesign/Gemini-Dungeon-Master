@@ -1,4 +1,3 @@
-// FIX: Replaced deprecated `GenerateContentRequest` with `GenerateContentParameters` to align with the latest API.
 import { GoogleGenAI, GenerateContentParameters, GenerateContentResponse } from "@google/genai";
 
 if (!process.env.API_KEY) {
