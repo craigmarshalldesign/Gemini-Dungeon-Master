@@ -4,6 +4,7 @@ import { GameStatus, ClassType, QuestStatus } from './types';
 import { generateWorld } from './services/worldService';
 import { generateZoneLayout, populateZone } from './services/zoneService';
 import { CHARACTER_CLASSES } from './constants';
+import { testWorldData } from './testWorldData';
 import GameCreationScreen from './components/GameCreationScreen';
 import CharacterCreationScreen from './components/CharacterCreationScreen';
 import GameScreen from './components/GameScreen';
@@ -16,6 +17,7 @@ const initialGameState: GameState = {
   mainStoryline: '',
   dmMessage: 'Welcome, adventurer. A new world awaits your story.',
   players: [null, null],
+  playerSpawnPoints: null,
   currentZone: null,
   dialogue: null,
   isChatting: false,
@@ -124,6 +126,7 @@ const App: React.FC = () => {
         mainStoryline: worldData.mainStoryline,
         currentZone: startingZone,
         quests: activeQuests,
+        playerSpawnPoints: populationData.playerSpawnPoints,
         dmMessage: `Welcome to ${worldData.worldName}. The story is: ${worldData.mainStoryline}`,
         isLoading: false,
       }));
@@ -134,34 +137,52 @@ const App: React.FC = () => {
     }
   }, []);
 
-  const handleCharactersCreate = useCallback((player1Name: string, player1Class: ClassType, player2Name: string, player2Class: ClassType) => {
-    
-    // Find safe spawn points from the current zone map
-    const findSafeSpawnPoints = (tileMap: ZoneMap): [{x:number, y:number}, {x:number, y:number}] => {
-        const isSafe = (x: number, y: number) => {
-            return y >= 0 && y < tileMap.length && x >= 0 && x < tileMap[0].length && ['grass', 'path'].includes(tileMap[y][x]);
-        }
+  const handleStartTestWorld = useCallback(() => {
+    setGameState(prev => ({
+      ...prev,
+      isLoading: true,
+      error: null,
+      dmMessage: 'Loading the Test World...',
+      loadingProgress: 50,
+      loadingMessage: 'Assembling test data...'
+    }));
 
-        for (let y = 0; y < tileMap.length; y++) {
-            for (let x = 0; x < tileMap[0].length; x++) {
-                // Check for horizontal pair
-                if (isSafe(x, y) && isSafe(x + 1, y)) {
-                    return [{ x, y }, { x: x + 1, y }];
-                }
-                // Check for vertical pair
-                if (isSafe(x, y) && isSafe(x, y + 1)) {
-                    return [{ x, y }, { x, y: y + 1 }];
-                }
+    setTimeout(() => {
+        const activeQuests: Quest[] = [];
+        testWorldData.npcs.forEach(npc => {
+            if (npc.quest) {
+                activeQuests.push(npc.quest);
             }
-        }
-        // Fallback if no adjacent safe spots are found (should be rare)
-        return [{ x: 1, y: 1 }, { x: 1, y: 2 }];
-    };
+        });
 
+        const startingZone: Zone = {
+            name: testWorldData.zoneName,
+            description: testWorldData.startingZoneDescription,
+            tileMap: testWorldData.tileMap,
+            npcs: testWorldData.npcs,
+            items: [],
+            exitPosition: testWorldData.exitPosition,
+        };
+
+        setGameState(prev => ({
+            ...prev,
+            status: GameStatus.CHARACTER_CREATION,
+            worldName: testWorldData.worldName,
+            mainStoryline: testWorldData.mainStoryline,
+            currentZone: startingZone,
+            quests: activeQuests,
+            playerSpawnPoints: testWorldData.playerSpawnPoints,
+            dmMessage: `Welcome to the test world: ${testWorldData.worldName}.`,
+            isLoading: false,
+        }));
+    }, 500);
+  }, []);
+
+  const handleCharactersCreate = useCallback((player1Name: string, player1Class: ClassType, player2Name: string, player2Class: ClassType) => {
     setGameState(prev => {
-      if (!prev.currentZone) return prev; // Should not happen
+      if (!prev.currentZone || !prev.playerSpawnPoints) return prev; // Should not happen
 
-      const [pos1, pos2] = findSafeSpawnPoints(prev.currentZone.tileMap);
+      const [pos1, pos2] = prev.playerSpawnPoints;
       
       const createPlayer = (id: number, name: string, classType: ClassType, position: {x: number, y: number}): Player => {
         const charClass = CHARACTER_CLASSES[classType];
@@ -199,6 +220,7 @@ const App: React.FC = () => {
       case GameStatus.WORLD_CREATION:
         return <GameCreationScreen 
             onCreate={handleWorldCreate} 
+            onStartTest={handleStartTestWorld}
             isLoading={gameState.isLoading} 
             error={gameState.error}
             loadingProgress={gameState.loadingProgress}

@@ -39,6 +39,8 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState, isFull
   const { players, currentZone, activePlayerId, quests, mainStoryline, worldName, dialogue, isChatting, chatStates, messageQueue, hasNewQuest } = gameState;
   const activePlayer = players[activePlayerId];
 
+  const isGamePaused = !!dialogue || isChatting || !!showCharSheet || !!selectedObject || showInventory || showAbilities || showQuests || showSettings;
+
   useEffect(() => {
     const allQuestsCompleted = quests.length > 0 && quests.every(q => q.status === QuestStatus.COMPLETED);
 
@@ -47,6 +49,60 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, setGameState, isFull
       setGameState(prev => ({...prev, messageQueue: ["You've completed all local quests! A path to a new area has opened."], dmMessage: "You've completed all local quests! A path to a new area has opened."}));
     }
   }, [quests, setGameState, zoneCompleted]);
+  
+  useEffect(() => {
+    if (isGamePaused) {
+        return; 
+    }
+
+    const moveInterval = setInterval(() => {
+        setGameState(prev => {
+            if (!prev.currentZone) return prev;
+            
+            const allPlayerPositions = new Set(prev.players.map(p => p ? `${p.position.x},${p.position.y}` : ''));
+            const nextNpcs = [...prev.currentZone.npcs];
+            const nextNpcPositions = new Set(nextNpcs.map(n => `${n.position.x},${n.position.y}`));
+
+            for (let i = 0; i < nextNpcs.length; i++) {
+                if (Math.random() < 0.3) { // 30% chance to move
+                    const npc = nextNpcs[i];
+                    const directions = [{dx: 0, dy: -1}, {dx: 0, dy: 1}, {dx: -1, dy: 0}, {dx: 1, dy: 0}];
+                    const { dx, dy } = directions[Math.floor(Math.random() * directions.length)];
+                    
+                    const newX = npc.position.x + dx;
+                    const newY = npc.position.y + dy;
+                    
+                    const isTraversable = 
+                        newX >= 0 && newX < prev.currentZone.tileMap[0].length &&
+                        newY >= 0 && newY < prev.currentZone.tileMap.length &&
+                        ['grass', 'path'].includes(prev.currentZone.tileMap[newY][newX]);
+                    
+                    const targetKey = `${newX},${newY}`;
+                    const isOccupiedByPlayer = allPlayerPositions.has(targetKey);
+                    const isOccupiedByNpc = nextNpcPositions.has(targetKey);
+
+                    if (isTraversable && !isOccupiedByPlayer && !isOccupiedByNpc) {
+                        const oldKey = `${npc.position.x},${npc.position.y}`;
+                        nextNpcPositions.delete(oldKey);
+                        nextNpcPositions.add(targetKey);
+                        nextNpcs[i] = { ...npc, position: { x: newX, y: newY } };
+                    }
+                }
+            }
+
+            return {
+                ...prev,
+                currentZone: {
+                    ...prev.currentZone,
+                    npcs: nextNpcs,
+                }
+            };
+        });
+
+    }, 3000); // Attempt to move every 3 seconds
+
+    return () => clearInterval(moveInterval);
+  }, [isGamePaused, setGameState]);
 
   if (!currentZone || !players[0] || !players[1]) {
     return <div>Loading game...</div>;

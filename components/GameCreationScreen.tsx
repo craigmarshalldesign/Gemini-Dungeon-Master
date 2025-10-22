@@ -3,13 +3,14 @@ import LoadingProgressBar from './LoadingProgressBar';
 
 interface GameCreationScreenProps {
   onCreate: (prompt: string) => void;
+  onStartTest: () => void;
   isLoading: boolean;
   error: string | null;
   loadingProgress: number;
   loadingMessage: string;
 }
 
-const GameCreationScreen: React.FC<GameCreationScreenProps> = ({ onCreate, isLoading, error, loadingProgress, loadingMessage }) => {
+const GameCreationScreen: React.FC<GameCreationScreenProps> = ({ onCreate, onStartTest, isLoading, error, loadingProgress, loadingMessage }) => {
   const [prompt, setPrompt] = useState('');
 
   const handleCreate = () => {
@@ -52,6 +53,14 @@ const GameCreationScreen: React.FC<GameCreationScreenProps> = ({ onCreate, isLoa
               Let AI Decide
             </button>
           </div>
+           <div className="mt-6 border-t border-gray-600 pt-4 w-full max-w-lg">
+             <button
+                onClick={onStartTest}
+                className="w-full px-6 py-2 bg-yellow-600 hover:bg-yellow-500 text-black font-bold tracking-wider border-b-4 border-yellow-800 hover:border-yellow-700 rounded"
+              >
+                Start Test World
+              </button>
+           </div>
         </>
       )}
     </div>

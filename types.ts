@@ -151,6 +151,7 @@ export interface GameState {
   mainStoryline: string;
   dmMessage: string;
   players: [Player | null, Player | null];
+  playerSpawnPoints: [{ x: number; y: number }, { x: number; y: number }] | null;
   currentZone: Zone | null;
   dialogue: DialogueState | null;
   isChatting: boolean;
