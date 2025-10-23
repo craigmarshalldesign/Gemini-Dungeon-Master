@@ -29,7 +29,7 @@ function extractJson(text: string): string {
 /**
  * Generates a non-repeating path from a start to an end coordinate on a grid.
  */
-function generatePlayerPath(
+export function generatePlayerPath(
     start: { x: number; y: number },
     end: { x: number; y: number }
 ): { x: number; y: number }[] {
@@ -79,7 +79,7 @@ export async function generateWorld(prompt: string): Promise<GameWorldResponse> 
     Based on this, generate:
     1. A concise main storyline.
     2. A compelling name for the world.
-    3. A 6x6 grid representing the world map. Each cell should be a JSON object with a 'name' (e.g., "The Whispering Woods") and a 'terrain' (e.g., "forest", "plains", "mountains", "desert", "swamp").
+    3. A 6x6 grid representing the world map. Each cell should be a JSON object with a 'name' (e.g., "The Whispering Woods"), a 'terrain' (e.g., "forest", "plains", "mountains", "desert", "swamp"), and a one-sentence, flavorful 'description'.
     Return the entire response as a single JSON object.`;
 
     const response = await generateWithRetry({
@@ -101,8 +101,9 @@ export async function generateWorld(prompt: string): Promise<GameWorldResponse> 
                                 properties: {
                                     name: { type: Type.STRING },
                                     terrain: { type: Type.STRING },
+                                    description: { type: Type.STRING },
                                 },
-                                required: ['name', 'terrain']
+                                required: ['name', 'terrain', 'description']
                             }
                         }
                     }

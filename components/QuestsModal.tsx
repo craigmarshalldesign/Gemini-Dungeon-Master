@@ -4,13 +4,12 @@ import { QuestStatus } from '../types';
 
 interface QuestsModalProps {
   mainStory: string;
-  quests: Quest[];
+  localQuests: Quest[];
   worldName: string;
   onClose: () => void;
 }
 
-const QuestsModal: React.FC<QuestsModalProps> = ({ mainStory, quests, worldName, onClose }) => {
-  const localQuests = quests.filter(q => q.status !== QuestStatus.INACTIVE);
+const QuestsModal: React.FC<QuestsModalProps> = ({ mainStory, localQuests, worldName, onClose }) => {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4" onClick={onClose}>

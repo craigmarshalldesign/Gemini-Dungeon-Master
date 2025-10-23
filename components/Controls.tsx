@@ -4,6 +4,7 @@ interface ControlsProps {
   onMove: (dx: number, dy: number) => void;
   onInteract: () => void;
   onBack: () => void;
+  onMapClick: () => void;
   onInventoryClick: () => void;
   onAbilitiesClick: () => void;
   onQuestsClick: () => void;
@@ -108,6 +109,7 @@ const Controls: React.FC<ControlsProps> = ({
     onMove, 
     onInteract, 
     onBack, 
+    onMapClick,
     onInventoryClick, 
     onAbilitiesClick, 
     onQuestsClick,
@@ -164,6 +166,9 @@ const Controls: React.FC<ControlsProps> = ({
       <div className="flex flex-col items-end gap-3">
           {/* Panel Buttons */}
           <div className="flex items-center gap-2">
+               <IconButton onClick={onMapClick} disabled={arePanelButtonsDisabled}>
+                  <span className="text-2xl">🗺️</span>
+              </IconButton>
               <IconButton onClick={onQuestsClick} disabled={arePanelButtonsDisabled} className={hasNewQuest ? 'bg-yellow-500 border-yellow-300 animate-pulse' : ''}>
                   <span className="text-2xl">❗</span>
               </IconButton>

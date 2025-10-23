@@ -73,6 +73,7 @@ export interface Player {
 
 export interface WorldMapZone {
   name: string;
+  description: string;
   terrain: string; // e.g., 'forest', 'plains'
   x: number;
   y: number;
@@ -125,6 +126,7 @@ export type ZoneMap = string[][];
 export interface Zone {
   name: string;
   description: string;
+  terrain: string;
   tileMap: ZoneMap;
   npcs: NPC[];
   items: Item[];
@@ -140,6 +142,12 @@ export interface DialogueState {
   npc: NPC;
   currentText: string;
   menuSelectionIndex: number; // 0 for Talk, 1 for Chat, 2 for Close
+}
+
+export interface ZoneTransitionPrompt {
+    targetCoords: { x: number; y: number };
+    cameFromCoords: { x: number; y: number };
+    menuSelectionIndex: number; // 0 for Travel, 1 for Stay
 }
 
 export interface DisplayChatMessage {
@@ -165,14 +173,18 @@ export interface GameState {
   finalBossZoneCoords: { x: number; y: number } | null;
   generatedZones: Record<string, Zone>; // Key: "x,y", Value: Zone object
   currentZoneCoords: { x: number; y: number } | null;
+  visitedZoneCoords: string[];
 
   dialogue: DialogueState | null;
+  zoneTransitionPrompt: ZoneTransitionPrompt | null;
   isChatting: boolean;
   chatStates: Record<string, NPCChatState>; // Key is NPC name
   activePlayerId: number;
   isLoading: boolean;
   loadingProgress: number;
   loadingMessage: string;
+  loadingTitle?: string | null;
+  loadingSubtitle?: string | null;
   error: string | null;
   quests: Quest[];
   messageQueue: string[] | null;

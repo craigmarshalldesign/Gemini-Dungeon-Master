@@ -14,10 +14,13 @@ export function startChatSession(
     npc: NPC,
     worldName: string,
     mainStoryline: string,
+    zoneName: string,
     zoneDescription: string,
+    zoneTerrain: string,
     player: Player,
     history: DisplayChatMessage[],
-    quest: Quest | null
+    quest: Quest | null,
+    otherNpcNames: string[]
 ): Chat {
     let systemInstruction = `
         You are an NPC in a D&D style game. You must strictly roleplay as this character and never break character.
@@ -25,7 +28,7 @@ export function startChatSession(
         You are speaking to a player. Respond directly to their messages.
 
         WORLD CONTEXT: The world is named '${worldName}'. The main story is: '${mainStoryline}'.
-        ZONE CONTEXT: You are currently in a zone described as: '${zoneDescription}'.
+        ZONE CONTEXT: You are currently in a ${zoneTerrain} zone named '${zoneName}', which is described as: '${zoneDescription}'. You are aware of other individuals in this area: ${otherNpcNames.join(', ')}.
 
         YOUR PERSONA:
         - Name: ${npc.name}
@@ -64,9 +67,12 @@ export function startChatSession(
 export async function generateDialogue(
     worldName: string,
     mainStoryline: string,
+    zoneName: string,
     zoneDescription: string,
+    zoneTerrain: string,
     npc: NPC,
-    player: Player
+    player: Player,
+    otherNpcNames: string[]
 ): Promise<string> {
     const prompt = `
         You are an NPC in a D&D style game. Your persona is defined below. A player is talking to you. 
@@ -74,7 +80,7 @@ export async function generateDialogue(
         Do not break character. Do not add conversational pleasantries like "Certainly, here is a line...". Just provide the dialogue itself.
 
         WORLD CONTEXT: The world is named '${worldName}'. The main story is: '${mainStoryline}'.
-        ZONE CONTEXT: You are currently in a zone described as: '${zoneDescription}'.
+        ZONE CONTEXT: You are currently in a ${zoneTerrain} zone named '${zoneName}', described as: '${zoneDescription}'. You are aware of other individuals in this area: ${otherNpcNames.join(', ')}.
 
         YOUR PERSONA:
         - Name: ${npc.name}

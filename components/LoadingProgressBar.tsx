@@ -16,7 +16,7 @@ const LoadingProgressBar: React.FC<LoadingProgressBarProps> = ({ progress, messa
           <span className="text-white font-bold text-sm pr-2">{Math.round(progress)}%</span>
         </div>
       </div>
-      <p className="text-lg text-green-300 h-6">{message}</p>
+      <p className="text-lg text-green-300 min-h-12 flex items-center justify-center break-words">{message}</p>
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import type { GameState, Player, Direction, NPC, Item, Quest, DialogueState, Zone } from '../types';
 import { QuestStatus, ClassType } from '../types';
 import MapView from './MapView';
@@ -7,6 +7,7 @@ import CharacterSheetModal from './CharacterSheetModal';
 import InventoryModal from './InventoryModal';
 import AbilitiesModal from './AbilitiesModal';
 import QuestsModal from './QuestsModal';
+import WorldMapModal from './WorldMapModal';
 import NpcInfoModal from './NpcInfoModal';
 import ItemInfoModal from './ItemInfoModal';
 import ChatModal from './ChatModal';
@@ -60,6 +61,7 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, currentZone, setGame
   const [showInventory, setShowInventory] = useState(false);
   const [showAbilities, setShowAbilities] = useState(false);
   const [showQuests, setShowQuests] = useState(false);
+  const [showWorldMap, setShowWorldMap] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [zoneCompleted, setZoneCompleted] = useState(false);
   const [pressedKeys, setPressedKeys] = React.useState<Set<string>>(new Set());
@@ -69,10 +71,15 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, currentZone, setGame
   const moveIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const activeMoveKey = useRef<string | null>(null);
   
-  const { players, activePlayerId, quests, mainStoryline, worldName, dialogue, isChatting, chatStates, messageQueue, hasNewQuest, currentZoneCoords, zonePath } = gameState;
+  const { players, activePlayerId, quests, mainStoryline, worldName, dialogue, isChatting, chatStates, messageQueue, hasNewQuest, currentZoneCoords, zonePath, zoneTransitionPrompt, worldMap, visitedZoneCoords, finalBossZoneCoords, generatedZones } = gameState;
   const activePlayer = players[activePlayerId];
 
-  const isGamePaused = !!dialogue || isChatting || !!showCharSheet || !!selectedObject || showInventory || showAbilities || showQuests || showSettings || gameState.isLoading;
+  const isGamePaused = !!dialogue || isChatting || !!showCharSheet || !!selectedObject || showInventory || showAbilities || showQuests || showWorldMap || showSettings || gameState.isLoading || !!zoneTransitionPrompt;
+
+  // Reset zone completion status when entering a new zone
+  useEffect(() => {
+    setZoneCompleted(false);
+  }, [currentZone.name]);
 
   useEffect(() => {
     // Check if all quests *for the current zone* are complete.
@@ -169,7 +176,7 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, currentZone, setGame
     lastMoveTimestamp.current = now;
 
     setGameState(prev => {
-        const { players, activePlayerId, isChatting, messageQueue, dialogue, currentZoneCoords, zonePath } = prev;
+        const { players, activePlayerId, isChatting, messageQueue, dialogue, currentZoneCoords, zonePath, zoneTransitionPrompt } = prev;
         
         const activePlayer = players[activePlayerId];
         
@@ -177,10 +184,16 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, currentZone, setGame
             return prev;
         }
 
-        if (dialogue) {
-            const direction = dy === -1 ? 'up' : (dy === 1 ? 'down' : null);
-            if (!direction) return prev;
+        const direction = dy === -1 ? 'up' : (dy === 1 ? 'down' : null);
 
+        if (zoneTransitionPrompt) {
+            if (!direction) return prev;
+            const newIndex = (zoneTransitionPrompt.menuSelectionIndex + (direction === 'up' ? -1 : 1) + 2) % 2;
+            return { ...prev, zoneTransitionPrompt: { ...zoneTransitionPrompt, menuSelectionIndex: newIndex }};
+        }
+
+        if (dialogue) {
+            if (!direction) return prev;
             const menuOptionsCount = 3;
             const newIndex = direction === 'up'
                 ? (dialogue.menuSelectionIndex - 1 + menuOptionsCount) % menuOptionsCount
@@ -206,8 +219,7 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, currentZone, setGame
         if (zoneCompleted && exitPosition && newX === exitPosition.x && newY === exitPosition.y) {
             if (currentPathIndex < zonePath.length - 1) {
                 const nextZoneCoords = zonePath[currentPathIndex + 1];
-                onZoneTransition(nextZoneCoords, currentZoneCoords);
-                return prev; // Stop further processing, let transition handler take over
+                return { ...prev, zoneTransitionPrompt: { targetCoords: nextZoneCoords, cameFromCoords: currentZoneCoords, menuSelectionIndex: 0 }};
             } else {
                  return {...prev, dialogue: null, dmMessage: "You've reached the final area! The adventure concludes for now."};
             }
@@ -216,8 +228,7 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, currentZone, setGame
         if (entryPosition && newX === entryPosition.x && newY === entryPosition.y) {
             if (currentPathIndex > 0) {
                 const prevZoneCoords = zonePath[currentPathIndex - 1];
-                onZoneTransition(prevZoneCoords, currentZoneCoords);
-                return prev; // Stop further processing
+                return { ...prev, zoneTransitionPrompt: { targetCoords: prevZoneCoords, cameFromCoords: currentZoneCoords, menuSelectionIndex: 0 }};
             }
         }
 
@@ -243,7 +254,7 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, currentZone, setGame
             return { ...prev, players: newPlayers };
         }
     });
-  }, [setGameState, zoneCompleted, currentZone, onZoneTransition]);
+  }, [setGameState, zoneCompleted, currentZone]);
 
   const switchPlayer = () => {
     if (dialogue || isChatting || (messageQueue && messageQueue.length > 0)) return;
@@ -294,12 +305,13 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, currentZone, setGame
 
   const handleDialogueAction = useCallback(async (action: 'talk' | 'chat' | 'close') => {
     if (!dialogue || !activePlayer) return;
+    const otherNpcNames = currentZone.npcs.filter(n => n.name !== dialogue.npc.name).map(n => n.name);
 
     switch (action) {
       case 'talk':
         setGameState(prev => ({ ...prev, isLoading: true }));
         try {
-            const newText = await generateDialogue(worldName, mainStoryline, currentZone.description, dialogue.npc, activePlayer);
+            const newText = await generateDialogue(worldName, mainStoryline, currentZone.name, currentZone.description, currentZone.terrain, dialogue.npc, activePlayer, otherNpcNames);
             setGameState(prev => prev.dialogue ? {...prev, dialogue: {...prev.dialogue, currentText: newText}} : prev);
         } catch (error) {
             console.error("Dialogue generation failed:", error);
@@ -316,7 +328,7 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, currentZone, setGame
         const npcQuestTemplate = dialogue.npc.quest;
         const associatedQuest = npcQuestTemplate ? quests.find(q => q.id === npcQuestTemplate.id) : null;
 
-        const session = startChatSession(dialogue.npc, worldName, mainStoryline, currentZone.description, activePlayer, existingChatState.history, associatedQuest);
+        const session = startChatSession(dialogue.npc, worldName, mainStoryline, currentZone.name, currentZone.description, currentZone.terrain, activePlayer, existingChatState.history, associatedQuest, otherNpcNames);
         setActiveChatSession(session);
         setGameState(prev => ({ ...prev, isChatting: true }));
         break;
@@ -334,9 +346,33 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, currentZone, setGame
         setActiveChatSession(null);
         break;
     }
-  }, [activePlayer, chatStates, completeQuestAndApplyRewards, currentZone.description, dialogue, mainStoryline, quests, setGameState, worldName]);
+  }, [activePlayer, chatStates, completeQuestAndApplyRewards, currentZone, mainStoryline, quests, setGameState, worldName, dialogue]);
 
   const handleInteract = useCallback(() => {
+    if (zoneTransitionPrompt) {
+        const { menuSelectionIndex, targetCoords, cameFromCoords } = zoneTransitionPrompt;
+        if (menuSelectionIndex === 0) { // Travel
+            onZoneTransition(targetCoords, cameFromCoords);
+        } else { // Stay
+            setGameState(prev => {
+                const activePlayer = prev.players[prev.activePlayerId];
+                if (!activePlayer) return prev;
+                
+                let newPosition = { ...activePlayer.position };
+                if (activePlayer.direction === 'up') newPosition.y++;
+                else if (activePlayer.direction === 'down') newPosition.y--;
+                else if (activePlayer.direction === 'left') newPosition.x++;
+                else if (activePlayer.direction === 'right') newPosition.x--;
+                
+                const newPlayers = [...prev.players] as [Player, Player];
+                newPlayers[prev.activePlayerId] = { ...activePlayer, position: newPosition };
+
+                return { ...prev, zoneTransitionPrompt: null, dmMessage: 'You step back from the portal.', players: newPlayers };
+            });
+        }
+        return;
+    }
+
     if (messageQueue && messageQueue.length > 0) {
         setGameState(prev => {
             const newQueue = prev.messageQueue!.slice(1);
@@ -465,7 +501,7 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, currentZone, setGame
         }
         return prev;
     });
-  }, [messageQueue, activePlayer, isChatting, dialogue, setGameState, handleDialogueAction, currentZoneCoords]);
+  }, [gameState, setGameState, handleDialogueAction, onZoneTransition]);
   
   const handleSendChatMessage = async (message: string) => {
     if (!dialogue || !activeChatSession) return;
@@ -529,6 +565,7 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, currentZone, setGame
   const handleNewConversation = () => {
     if (!dialogue || !activePlayer) return;
     const npcName = dialogue.npc.name;
+    const otherNpcNames = currentZone.npcs.filter(n => n.name !== dialogue.npc.name).map(n => n.name);
 
     const npcQuestTemplate = dialogue.npc.quest;
     const associatedQuest = npcQuestTemplate ? quests.find(q => q.id === npcQuestTemplate.id) : null;
@@ -541,17 +578,35 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, currentZone, setGame
         }
     }));
 
-    const newSession = startChatSession(dialogue.npc, worldName, mainStoryline, currentZone.description, activePlayer, [], associatedQuest);
+    const newSession = startChatSession(dialogue.npc, worldName, mainStoryline, currentZone.name, currentZone.description, currentZone.terrain, activePlayer, [], associatedQuest, otherNpcNames);
     setActiveChatSession(newSession);
   }
 
   const handleBack = useCallback(() => {
+    if (zoneTransitionPrompt) {
+        setGameState(prev => {
+            const activePlayer = prev.players[prev.activePlayerId];
+            if (!activePlayer) return prev;
+            
+            let newPosition = { ...activePlayer.position };
+            if (activePlayer.direction === 'up') newPosition.y++;
+            else if (activePlayer.direction === 'down') newPosition.y--;
+            else if (activePlayer.direction === 'left') newPosition.x++;
+            else if (activePlayer.direction === 'right') newPosition.x--;
+            
+            const newPlayers = [...prev.players] as [Player, Player];
+            newPlayers[prev.activePlayerId] = { ...activePlayer, position: newPosition };
+
+            return { ...prev, zoneTransitionPrompt: null, dmMessage: 'You step back from the portal.', players: newPlayers };
+        });
+        return;
+    }
     if (isChatting) {
         handleCloseChat();
     } else if (dialogue) {
         handleDialogueAction('close');
     }
-  }, [isChatting, dialogue, handleCloseChat, handleDialogueAction]);
+  }, [isChatting, dialogue, zoneTransitionPrompt, handleCloseChat, handleDialogueAction, setGameState]);
 
   const handleQuestsClick = () => {
     setShowQuests(true);
@@ -569,7 +624,7 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, currentZone, setGame
       const key = e.key.toLowerCase();
       setPressedKeys(prev => new Set(prev).add(key));
 
-      if (dialogue) {
+      if (dialogue || zoneTransitionPrompt) {
         if (key === 'w') {
           e.preventDefault();
           handleMove(0, -1);
@@ -642,7 +697,7 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, currentZone, setGame
         clearInterval(moveIntervalRef.current);
       }
     };
-  }, [isGamePaused, dialogue, isChatting, handleMove, handleInteract, handleBack]);
+  }, [isGamePaused, dialogue, isChatting, zoneTransitionPrompt, handleMove, handleInteract, handleBack]);
 
   const isNpc = selectedObject && 'role' in selectedObject;
   const isItem = selectedObject && !('role' in selectedObject);
@@ -650,10 +705,48 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, currentZone, setGame
   
   const hasActiveMessageQueue = !!messageQueue && messageQueue.length > 0;
   const isDPadDisabled = isChatting || hasActiveMessageQueue || gameState.isLoading;
-  const arePanelButtonsDisabled = isChatting || hasActiveMessageQueue || !!dialogue || gameState.isLoading;
-  const isSwitchPlayerDisabled = isChatting || hasActiveMessageQueue || !!dialogue || gameState.isLoading;
-  const isBackButtonDisabled = isChatting;
+  const arePanelButtonsDisabled = isChatting || hasActiveMessageQueue || !!dialogue || gameState.isLoading || !!zoneTransitionPrompt;
+  const isSwitchPlayerDisabled = isChatting || hasActiveMessageQueue || !!dialogue || gameState.isLoading || !!zoneTransitionPrompt;
+  const isBackButtonDisabled = !(isChatting || dialogue || zoneTransitionPrompt);
   const areControlsDimmed = isChatting || gameState.isLoading;
+  
+  const localQuestsForModal = quests.filter(q => {
+      if (q.status === QuestStatus.INACTIVE) return false;
+      const questGiver = currentZone.npcs.find(npc => npc.quest?.id === q.id);
+      return !!questGiver;
+  });
+  
+  const completedZoneCoords = useMemo(() => {
+    const completedCoords = new Set<string>();
+    for (const key in generatedZones) {
+        if (!generatedZones.hasOwnProperty(key)) continue;
+
+        const zone = generatedZones[key];
+        const questsInZone = zone.npcs
+            .map(npc => npc.quest?.id)
+            .filter((id): id is string => !!id);
+        
+        if (questsInZone.length === 0) {
+            continue;
+        }
+        
+        const allCompleted = questsInZone.every(questId => {
+            const globalQuestState = quests.find(q => q.id === questId);
+            return globalQuestState?.status === QuestStatus.COMPLETED;
+        });
+
+        if (allCompleted) {
+            completedCoords.add(key);
+        }
+    }
+    return completedCoords;
+  }, [generatedZones, quests]);
+  
+  const handleWarpToBoss = () => {
+    if (finalBossZoneCoords && currentZoneCoords) {
+        onZoneTransition(finalBossZoneCoords, currentZoneCoords);
+    }
+  };
 
   return (
     <div className="flex flex-col h-full w-full">
@@ -662,7 +755,19 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, currentZone, setGame
       {isItem && <ItemInfoModal item={selectedObject as Item} quest={quests.find(q => q.objective.itemId === (selectedObject as Item).id)} onClose={() => setSelectedObject(null)} />}
       {showInventory && activePlayer && <InventoryModal player={activePlayer} onClose={() => setShowInventory(false)} />}
       {showAbilities && activePlayer && <AbilitiesModal player={activePlayer} onClose={() => setShowAbilities(false)} />}
-      {showQuests && <QuestsModal mainStory={mainStoryline} quests={quests} worldName={worldName} onClose={() => setShowQuests(false)} />}
+      {showQuests && <QuestsModal mainStory={mainStoryline} localQuests={localQuestsForModal} worldName={worldName} onClose={() => setShowQuests(false)} />}
+      {showWorldMap && worldMap && currentZoneCoords && finalBossZoneCoords && (
+        <WorldMapModal
+          worldMap={worldMap}
+          currentZoneCoords={currentZoneCoords}
+          finalBossZoneCoords={finalBossZoneCoords}
+          visitedZoneCoords={new Set(visitedZoneCoords)}
+          zonePath={zonePath}
+          completedZoneCoords={completedZoneCoords}
+          onClose={() => setShowWorldMap(false)}
+          onWarpToBoss={handleWarpToBoss}
+        />
+      )}
       {showSettings && (
         <SettingsModal 
             onClose={() => setShowSettings(false)}
@@ -707,6 +812,7 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameState, currentZone, setGame
           onMove={handleMove} 
           onInteract={handleInteract} 
           onBack={handleBack}
+          onMapClick={() => setShowWorldMap(true)}
           onInventoryClick={() => setShowInventory(true)}
           onAbilitiesClick={() => setShowAbilities(true)}
           onQuestsClick={handleQuestsClick}

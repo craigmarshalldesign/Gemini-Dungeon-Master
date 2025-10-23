@@ -8,9 +8,11 @@ interface GameCreationScreenProps {
   error: string | null;
   loadingProgress: number;
   loadingMessage: string;
+  title?: string | null;
+  subtitle?: string | null;
 }
 
-const GameCreationScreen: React.FC<GameCreationScreenProps> = ({ onCreate, onStartTest, isLoading, error, loadingProgress, loadingMessage }) => {
+const GameCreationScreen: React.FC<GameCreationScreenProps> = ({ onCreate, onStartTest, isLoading, error, loadingProgress, loadingMessage, title, subtitle }) => {
   const [prompt, setPrompt] = useState('');
 
   const handleCreate = () => {
@@ -20,13 +22,21 @@ const GameCreationScreen: React.FC<GameCreationScreenProps> = ({ onCreate, onSta
   };
 
   const handleAIChoice = () => {
-    onCreate('A classic fantasy adventure involving a lost artifact and an encroaching darkness.');
+    const prompts = [
+        'A classic fantasy adventure involving a lost artifact and an encroaching darkness.',
+        'A steampunk city powered by a mysterious crystal is failing, and clockwork automatons are going haywire.',
+        'A vibrant archipelago is slowly being consumed by a magical, colorless fog that erases memories.',
+        'In a world where music is magic, a great silence is spreading from the cursed Silent Spire.',
+        'A detective story set in a city of elves and dwarves, where a powerful magical item has been stolen.'
+    ];
+    const randomPrompt = prompts[Math.floor(Math.random() * prompts.length)];
+    onCreate(randomPrompt);
   };
 
   return (
     <div className="flex flex-col items-center justify-center text-center p-4 bg-black border-2 border-gray-600 h-full rounded-lg">
-      <h1 className="text-2xl mb-2 text-yellow-300">Gemini Dungeon Master</h1>
-      <p className="mb-6 text-gray-400 text-xs">A new world awaits your story.</p>
+      <h1 className="text-2xl mb-2 text-yellow-300">{title || 'Gemini Dungeon Master'}</h1>
+      <p className="mb-6 text-gray-400 text-xs whitespace-pre-wrap">{subtitle || 'A new world awaits your story.'}</p>
       
       {isLoading ? (
         <LoadingProgressBar progress={loadingProgress} message={loadingMessage} />
